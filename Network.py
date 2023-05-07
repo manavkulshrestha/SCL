@@ -1,34 +1,28 @@
 import torch
 from torch_geometric.nn import GCNConv, PointNetConv, global_max_pool, MLP, radius, fps
+from torch_geometric.nn.dense.linear import Linear
 from torch import nn
 from utility import sliding
 
 
 class DependenceNet(torch.nn.Module):
     def __init__(self, *layer_sizes):
-    # def __init__(self, in_c, h1_c, h2_c, out_c):
         super().__init__()
         self.convs = nn.ModuleList([GCNConv(*inout) for inout in sliding(layer_sizes, 2)])
-        # self.conv1 = GCNConv(in_c, h1_c)
-        # self.conv2 = GCNConv(h1_c, h2_c)
-        # self.conv3 = GCNConv(h2_c, out_c)
 
     def encode(self, x, edge_index):
         for convi in self.convs[:-1]:
             x = convi(x, edge_index).relu()
 
         return self.convs[-1](x, edge_index)
-        # x = self.conv1(x, edge_index).relu()
-        # x = self.conv2(x, edge_index).relu()
-        # x = self.conv3(x, edge_index)
 
-        # return x
-
-    def decode(self, z, edge_label_index):
+    @classmethod
+    def decode(cls, z, edge_label_index):
         node1, node2 = edge_label_index
         return (z[node1] * z[node2]).sum(dim=-1)
 
-    def decode_all(self, z):
+    @classmethod
+    def decode_all(cls, z):
         return (z @ z.t() > 0).nonzero().t()
 
 
@@ -63,7 +57,7 @@ class GlobalSAModule(torch.nn.Module):
         return x, pos, batch
 
 
-class Net(torch.nn.Module):
+class ObjectNet(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -72,13 +66,29 @@ class Net(torch.nn.Module):
         self.sa2_module = SAModule(0.25, 0.4, MLP([128 + 3, 128, 128, 256]))
         self.sa3_module = GlobalSAModule(MLP([256 + 3, 256, 512, 1024]))
 
-        self.mlp = MLP([1024, 512, 256, 10], dropout=0.5, norm=None)
+        self.mlp = MLP([1024, 512, 256, 8], dropout=0.5, norm=None)
 
-    def forward(self, data):
-        sa0_out = (data.x, data.pos, data.batch)
+    def forward(self, data, get_emb=False, nobatch=False):
+        # if not self.training:
+        #     print(1)
+        batch = torch.zeros(data.pos.shape[0], dtype=torch.int64).cuda() if nobatch else data.batch
+
+        sa0_out = (data.x, data.pos, batch)
         sa1_out = self.sa1_module(*sa0_out)
         sa2_out = self.sa2_module(*sa1_out)
         sa3_out = self.sa3_module(*sa2_out)
         x, pos, batch = sa3_out
 
-        return self.mlp(x).log_softmax(dim=-1)
+        out, emb = self.mlp(x, return_emb=True)
+        outs = out.log_softmax(dim=-1)
+        if get_emb:
+            return outs, emb
+        else:
+            return outs
+
+    def prediction(self, data):
+        # batch = torch.zeros(data.pos.shape[0], dtype=torch.int64).cuda()
+        outs = self.forward(data, nobatch=True)
+        pred = outs.max(1)[1].item()+1
+
+        return pred

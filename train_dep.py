@@ -10,7 +10,7 @@ import numpy as np
 
 import tqdm
 
-from utility import get_dataloaders, get_rowcol, load_depgs, coo_withzeros, coo_matrix, save_model,\
+from utility import get_depdataloaders, get_rowcol, load_depgs, coo_withzeros, coo_matrix, save_model,\
                     device, DDPATH, RP_ROOT
 from Network import DependenceNet
 
@@ -77,7 +77,7 @@ def test_epoch(model, epoch, loader, thresh=0.9, progress=False):
 
 
 def main():
-    train_loader, val_loader, test_loader = get_dataloaders()
+    train_loader, val_loader, test_loader = get_depdataloaders()
 
     model = DependenceNet(21, 512, 1024, 512, 128).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
