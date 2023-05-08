@@ -2,17 +2,22 @@ import torch
 from torch_geometric.nn import GCNConv, PointNetConv, global_max_pool, MLP, radius, fps
 from torch_geometric.nn.dense.linear import Linear
 from torch import nn
-from utility import sliding
+from utility import sliding, sample_exact, normalize
+from torch_geometric.data import Data
+
+import torch.nn.functional as F
 
 
 class DependenceNet(torch.nn.Module):
     def __init__(self, *layer_sizes):
         super().__init__()
         self.convs = nn.ModuleList([GCNConv(*inout) for inout in sliding(layer_sizes, 2)])
+        self.activation = F.leaky_relu
 
     def encode(self, x, edge_index):
         for convi in self.convs[:-1]:
-            x = convi(x, edge_index).relu()
+            x = convi(x, edge_index)
+            x = F.leaky_relu(x)
 
         return self.convs[-1](x, edge_index)
 
@@ -24,6 +29,14 @@ class DependenceNet(torch.nn.Module):
     @classmethod
     def decode_all(cls, z):
         return (z @ z.t() > 0).nonzero().t()
+
+
+class DepNet2(torch.nn.Module):
+    def __init__(self):
+        super(self).__init__()
+
+    def forward(self, x):
+        pass
 
 
 class SAModule(torch.nn.Module):
@@ -68,12 +81,8 @@ class ObjectNet(nn.Module):
 
         self.mlp = MLP([1024, 512, 256, 8], dropout=0.5, norm=None)
 
-    def forward(self, data, get_emb=False, nobatch=False):
-        # if not self.training:
-        #     print(1)
-        batch = torch.zeros(data.pos.shape[0], dtype=torch.int64).cuda() if nobatch else data.batch
-
-        sa0_out = (data.x, data.pos, batch)
+    def forward(self, data, get_emb=False):
+        sa0_out = (data.x, data.pos, data.batch)
         sa1_out = self.sa1_module(*sa0_out)
         sa2_out = self.sa2_module(*sa1_out)
         sa3_out = self.sa3_module(*sa2_out)
@@ -87,8 +96,34 @@ class ObjectNet(nn.Module):
             return outs
 
     def prediction(self, data):
-        # batch = torch.zeros(data.pos.shape[0], dtype=torch.int64).cuda()
-        outs = self.forward(data, nobatch=True)
-        pred = outs.max(1)[1].item()+1
+        with torch.no_grad():
+            outs = self.forward(data)
+            pred = outs.max(1)[1].item()+1
 
-        return pred
+            return pred
+
+    @classmethod
+    def make_data(cls, x, sample=512):
+        with torch.no_grad():
+            pos = torch.tensor(sample_exact(normalize(x), sample), dtype=torch.float).cuda()
+            batch = torch.zeros(pos.shape[0], dtype=torch.int64).cuda()
+            data = Data(pos=pos, batch=batch)
+
+            return data
+
+    def predict(self, x, sample=512):
+        with torch.no_grad():
+            data = self.make_data(x, sample=sample)
+            pred = self.prediction(data)
+
+            return pred
+
+    def embed(self, x, sample=512, get_pred=False):
+        with torch.no_grad():
+            data = self.make_data(x, sample=sample)
+            outs, emb = self.forward(data, get_emb=True)
+
+            pred_tid = outs.max(1)[1].item() + 1
+
+            return (pred_tid, emb) if get_pred else emb
+

@@ -5,9 +5,9 @@ import torch
 from torch_geometric.data import Data, InMemoryDataset
 
 from Network import ObjectNet
+from utility import normalize
 
-
-RP_ROOT = osp.abspath('/mk/home/rp/')
+RP_ROOT = osp.abspath('/home/mk/rp/')
 DDPATH = osp.join(RP_ROOT, 'data/dep_data/')
 PDPATH = osp.join(RP_ROOT, 'data/pcd_data/')
 MODELS_PATH = osp.join(RP_ROOT, 'models/')
@@ -50,8 +50,8 @@ def tid_colors(typeidx):
 
 def main():
     cla_net = ObjectNet().cuda()
-    # mp = osp.join(MODELS_PATH, 'cn_model-200.pt')
-    mp = '/home/mk/rp/models/cn_test_model-20.pt'
+    mp = osp.join(MODELS_PATH, 'cn_model-200.pt')
+    # mp = '/home/mk/rp/models/cn_test_model-20.pt'
     cla_net.load_state_dict(torch.load(mp))
     cla_net.cuda()
     cla_net.eval()
@@ -61,7 +61,7 @@ def main():
     pcd_root = osp.join(rp_root, 'data/pcd_data/')
     dep_root = osp.join(rp_root, 'data/dep_data/')
 
-    i = 0
+    i = 1000
 
     file_name = f'{i // 1000}_{i % 1000}.npz'
     pcd_file = np.load(osp.join(pcd_root, file_name))
@@ -77,11 +77,12 @@ def main():
     for nid in np.unique(o_ids).astype(int):
         obj_pcd = pcds[o_ids == nid]
 
-        pos = torch.tensor(sample_exact(obj_pcd, 512)).cuda().float()
-        model_input = Data(pos=pos)
+        # pos = torch.tensor(sample_exact(normalize(obj_pcd), 512)).cuda().float()
+        # model_input = Data(pos=pos)
 
-        outs = cla_net(model_input, nobatch=True)
-        pred_tid = outs.max(1)[1].item() + 1
+        # outs = cla_net(model_input, nobatch=True)
+        # pred_tid = outs.max(1)[1].item() + 1
+        pred_tid = cla_net.predict(obj_pcd)
         print(f'{nid} is a {name(nid)}, predicted: {tid_name[pred_tid]}')
     # visualize(make_pcd(pcds, colors=tid_colors(t_ids)))
 

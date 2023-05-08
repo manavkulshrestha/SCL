@@ -121,11 +121,11 @@ class DependenceDataset(InMemoryDataset):
                  train=True):
         self.chunk = chunk
         self.sample_count = sample_count
-        self.dep_root = dep_root
+        self.pcd_root = pcd_root
         self.feat_net = feat_net
         self.pos_enc = PositionalEncoding(min_deg=0, max_deg=5, scale=1, offset=0)
 
-        super().__init__(pcd_root, transform, pre_transform, pre_filter)
+        super().__init__(dep_root, transform, pre_transform, pre_filter)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
@@ -137,13 +137,12 @@ class DependenceDataset(InMemoryDataset):
 
         for i in tqdm(range(*self.chunk), desc=f'Processing'):
             file_name = f'{i // 1000}_{i % 1000}.npz'
-            pcd_file = np.load(osp.join(self.root, file_name))
-            dep_file = np.load(osp.join(self.dep_root, file_name))
+            pcd_file = np.load(osp.join(self.pcd_root, file_name))
+            dep_file = np.load(osp.join(self.root, file_name))
             pcds, o_ids, t_ids = [pcd_file[x] for x in ['pc', 'oid', 'tid']]
             node_ids, dep_g = [dep_file[x] for x in ['node_ids', 'depg']]
 
-            # visualize(make_pcd(pcds, colors=tid_colors(t_ids)))
-
+            nodes_feats = []
             oid_tid_map = dict(zip(o_ids, t_ids))
             for oid in node_ids:
                 obj_pcd = pcds[o_ids == oid]
@@ -155,16 +154,22 @@ class DependenceDataset(InMemoryDataset):
                     obj_pcd = obj_pcd[idx]
 
                 # get total features from positional encoding of centroid and object level features from network
-                obj_pcd = torch.tensor(obj_pcd).float().cuda()
-                x = torch.cat([self.pos_enc(obj_cen), self.feat_net(obj_pcd, get_emb=True)])
+                cen_ten = torch.tensor(obj_cen, dtype=torch.float).cuda()
+                pred_tid, obj_emb = self.feat_net.embed(obj_pcd, get_pred=True)
 
-                # depg[i][j] == 1 --> i depends on j. edge labels are all ones
-                adj = coo_matrix(dep_g)
-                edge_index = torch.tensor(np.vstack([adj.row, adj.col]), dtype=torch.long)
+                obj_emb = torch.squeeze(obj_emb)
+                pos_emb = self.pos_enc(cen_ten)
+                x = torch.cat([pos_emb, obj_emb])
+                nodes_feats.append(x)
+            nodes_feats = torch.stack(nodes_feats)
 
-                # put into data. x is node features, edge_index is ground truth links' (row, col)
-                data = Data(x=x, edge_index=edge_index, num_nodes=len(node_ids), depg=dep_g)
-                data_list.append(data)
+            # depg[i][j] == 1 --> i depends on j. edge labels are all ones
+            adj = coo_matrix(dep_g)
+            edge_index = torch.tensor(np.vstack([adj.row, adj.col]), dtype=torch.long) #TODO check
+
+            # put into data. x is nodes' features, edge_index is ground truth links' (row, col)
+            data = Data(x=nodes_feats.cpu(), edge_index=edge_index, num_nodes=len(node_ids), depg=dep_g)
+            data_list.append(data)
 
         return data_list
 

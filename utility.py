@@ -11,6 +11,7 @@ from Dataset import DependenceDataset, ObjectDataset
 
 import open3d as o3d
 
+
 device = torch.device('cuda')
 RP_ROOT = osp.abspath('/home/mk/rp/')
 DDPATH = osp.join(RP_ROOT, 'data/dep_data/')
@@ -53,17 +54,18 @@ def load_depgs(data_dir):
     return ret
 
 
-def get_depdataloaders():
+def get_depdataloaders(feat_net):
     transform = T.Compose([
         T.NormalizeFeatures(),
         T.ToDevice(device),
     ])
 
-    train_dataset = DependenceDataset(DDPATH, chunk=(0, 8000), transform=transform)
-    val_dataset = DependenceDataset(DDPATH, chunk=(8000, 9000), transform=transform)
-    test_dataset = DependenceDataset(DDPATH, chunk=(9000, 10000), transform=transform)
+    sc = 512
+    train_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(0, 8000), transform=transform, sample_count=sc)
+    val_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(8000, 9000), transform=transform, sample_count=sc)
+    test_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(9000, 10000), transform=transform, sample_count=sc)
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)  # num workers causes error
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)  # num workers causes error
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=True)  # num workers causes error
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)  # num workers causes error
 
@@ -141,3 +143,26 @@ def visualize(pcd):
 def sample_exact(pcd, n):
     idx = np.random.choice(len(pcd), n, replace=len(pcd) < n)
     return pcd[idx]
+
+
+def normalize(inp):
+    # Center the input
+    center = np.mean(inp, axis=0)
+    centered_inp = inp - center
+
+    # Scale the input to (-1, 1)
+    scale = (1 / np.abs(centered_inp).max()) * 0.999999
+    normalized_inp = centered_inp * scale
+
+    return normalized_inp
+
+# def normalize(inp):
+#     # Center the input
+#     center = torch.mean(inp, dim=0)
+#     centered_inp = inp - center.unsqueeze(0)
+#
+#     # Scale the input to (-1, 1)
+#     scale = (1 / torch.abs(centered_inp).max()) * 0.999999
+#     normalized_inp = centered_inp * scale
+#
+#     return normalized_inp

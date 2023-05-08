@@ -12,9 +12,10 @@ import tqdm
 
 from utility import get_depdataloaders, get_rowcol, load_depgs, coo_withzeros, coo_matrix, save_model,\
                     device, DDPATH, RP_ROOT
-from Network import DependenceNet
+from Network import DependenceNet, ObjectNet
 
 writer = SummaryWriter(log_dir='logs')
+
 
 def loss_fn(pred, target):
     return F.binary_cross_entropy_with_logits(pred, target)
@@ -77,13 +78,17 @@ def test_epoch(model, epoch, loader, thresh=0.9, progress=False):
 
 
 def main():
-    train_loader, val_loader, test_loader = get_depdataloaders()
+    feat_net = ObjectNet().cuda()
+    feat_net.load_state_dict(torch.load('/home/mk/rp/models/cn_test_best_model.pt'))
+    feat_net.eval()
 
-    model = DependenceNet(21, 512, 1024, 512, 128).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
+    train_loader, val_loader, test_loader = get_depdataloaders(feat_net)
+
+    model = DependenceNet(511, 1024, 512, 128).to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
 
     best_val_f1 = 0
-    for epoch in range(1, 201):
+    for epoch in range(1, 10000):
         # get train loss and f1
         train_loss = train_epoch(model, epoch, train_loader, optimizer)
         val_f1 = test_epoch(model, epoch, val_loader)

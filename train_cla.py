@@ -37,9 +37,9 @@ def test_epoch(model, epoch, loader):
     for data in loader:
         data = data.to(device)
         with torch.no_grad():
-            actu = data.y
-            pred = model(data).max(1)[1]
-        correct += pred.eq(data.y).sum().item()
+            actu = data.y.item()+1
+            pred = model.prediction(data)
+        correct += actu == pred
 
     return correct / len(loader.dataset)
 
