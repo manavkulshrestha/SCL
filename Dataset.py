@@ -130,7 +130,7 @@ class DependenceDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return [f'ddata2_{self.chunk[0]}-{self.chunk[1]}.pt']
+        return [f'ddata2_nsl_{self.chunk[0]}-{self.chunk[1]}.pt']
 
     def process_files(self):
         data_list = []
@@ -164,6 +164,7 @@ class DependenceDataset(InMemoryDataset):
             nodes_feats = torch.stack(nodes_feats)
 
             # depg[i][j] == 1 --> i depends on j. edge labels are all ones
+            # dep_g = dep_g+np.eye(len(dep_g))
             adj = coo_matrix(dep_g)
             edge_index = torch.tensor(np.vstack([adj.row, adj.col]), dtype=torch.long) #TODO check
 

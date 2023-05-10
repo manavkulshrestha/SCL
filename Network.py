@@ -1,8 +1,9 @@
 import torch
+from torch.nn import BatchNorm2d, LeakyReLU, Dropout, BatchNorm1d
 from torch_geometric.nn import GCNConv, PointNetConv, global_max_pool, MLP, radius, fps
 from torch_geometric.nn.dense.linear import Linear
 from torch import nn
-from utility import sliding, sample_exact, normalize
+from utility import sliding, sample_exact, normalize, device
 from torch_geometric.data import Data
 
 import torch.nn.functional as F
@@ -30,13 +31,6 @@ class DependenceNet(torch.nn.Module):
     def decode_all(cls, z):
         return (z @ z.t() > 0).nonzero().t()
 
-
-class DepNet2(torch.nn.Module):
-    def __init__(self):
-        super(self).__init__()
-
-    def forward(self, x):
-        pass
 
 
 class SAModule(torch.nn.Module):
@@ -127,3 +121,47 @@ class ObjectNet(nn.Module):
 
             return (pred_tid, emb) if get_pred else emb
 
+
+class DNEncoder(torch.nn.Module):
+    def __init__(self, in_c, h_c, out_c):
+        super().__init__()
+        self.layer1 = GCNConv(in_c, h_c)
+        self.layer2 = GCNConv(h_c, out_c)
+        self.activation = LeakyReLU()
+
+    def forward(self, x, edge_index):
+        x = self.layer1(x, edge_index)
+        x = self.activation(x)
+        x = self.layer2(x, edge_index)
+
+        return x
+
+
+class DNDecoder(torch.nn.Module):
+    def __init__(self, h_c):
+        super().__init__()
+        hcdiv2 = h_c//2
+        self.linear1 = Linear(h_c, hcdiv2)
+        self.linear2 = Linear(hcdiv2, 1)
+        self.activation = LeakyReLU()
+
+    def forward(self, z):
+        z = self.linear1(z)
+        z = self.activation(z)
+        z = self.linear2(z)
+
+        return z
+
+
+class DNet(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels):
+        super().__init__()
+        self.encoder = DNEncoder(in_channels, hidden_channels, out_channels)
+        self.decoder = DNDecoder(out_channels)
+        self.loss = torch.nn.BCEWithLogitsLoss()
+
+    def forward(self, x, edge_label_index):
+        z = self.encoder(x)
+        x = self.decoder(z, edge_label_index)
+
+        return x
