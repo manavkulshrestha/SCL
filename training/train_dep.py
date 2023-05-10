@@ -4,17 +4,15 @@ from sklearn.metrics import f1_score
 from torch_geometric.utils import negative_sampling
 from torch.utils.tensorboard import SummaryWriter
 
-import os.path as osp
-
 import numpy as np
 
 import tqdm
 
-from utility import get_depdataloaders, get_rowcol, load_depgs, coo_withzeros, coo_matrix, save_model,\
-                    device, DDPATH, RP_ROOT
-from Network import DependenceNet, ObjectNet
+from Datasets.dutility import get_depdataloaders
+from utility import coo_withzeros, save_model, device
+from nn.Network import DependenceNet, ObjectNet
 
-writer = SummaryWriter(log_dir='logs')
+writer = SummaryWriter(log_dir='../logs')
 
 
 def loss_fn(pred, target):

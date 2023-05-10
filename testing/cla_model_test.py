@@ -2,10 +2,8 @@ import numpy as np
 import os.path as osp
 # import open3d as o3d
 import torch
-from torch_geometric.data import Data, InMemoryDataset
 
-from Network import ObjectNet
-from utility import normalize
+from nn.Network import ObjectNet
 
 RP_ROOT = osp.abspath('/home/mk/rp/')
 DDPATH = osp.join(RP_ROOT, 'data/dep_data/')

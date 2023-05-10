@@ -1,21 +1,12 @@
 import numpy as np
 from scipy.sparse import coo_matrix
-
 from os import path as osp
-
 import torch
-from torch_geometric.loader import DataLoader
-import torch_geometric.transforms as T
-
-from Dataset import DependenceDataset, ObjectDataset
-
 import open3d as o3d
 
 
 device = torch.device('cuda')
 RP_ROOT = osp.abspath('/home/mk/rp/')
-DDPATH = osp.join(RP_ROOT, 'data/dep_data/')
-PDPATH = osp.join(RP_ROOT, 'data/pcd_data/')
 MODELS_PATH = osp.join(RP_ROOT, 'models/')
 
 
@@ -52,45 +43,6 @@ def load_depgs(data_dir):
         ret.append((depg, get_rowcol(depg), len(depg)))
 
     return ret
-
-
-def get_depdataloaders(feat_net):
-    transform = T.Compose([
-        T.NormalizeFeatures(),
-        T.ToDevice(device),
-    ])
-
-    sc = 512
-    train_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(0, 8000), transform=transform, sample_count=sc)
-    val_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(8000, 9000), transform=transform, sample_count=sc)
-    test_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(9000, 10000), transform=transform, sample_count=sc)
-
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)  # num workers causes error
-    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=True)  # num workers causes error
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)  # num workers causes error
-
-    return train_loader, val_loader, test_loader
-
-
-def get_objdataloaders():
-    # transform = T.Compose([
-    #     T.NormalizeFeatures(),
-    #     T.ToDevice(device),
-    # ])
-
-    # pre_transform, transform = T.NormalizeScale(), T.SamplePoints(1024)
-    pre_transform, transform = T.NormalizeScale(), None
-
-    sc = 512
-    train_dataset = ObjectDataset(PDPATH, chunk=(0, 500), pre_transform=pre_transform, transform=transform, sample_count=sc)
-    val_dataset = ObjectDataset(PDPATH, chunk=(500, 550), pre_transform=pre_transform, transform=transform, sample_count=sc)
-    test_dataset = ObjectDataset(PDPATH, chunk=(550, 600), pre_transform=pre_transform, transform=transform, sample_count=sc)
-
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)  # num workers causes error
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=True)  # num workers causes error
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)  # num workers causes error
-
-    return train_loader, val_loader, test_loader
 
 
 def save_model(model, name):
@@ -156,13 +108,10 @@ def normalize(inp):
 
     return normalized_inp
 
-# def normalize(inp):
-#     # Center the input
-#     center = torch.mean(inp, dim=0)
-#     centered_inp = inp - center.unsqueeze(0)
-#
-#     # Scale the input to (-1, 1)
-#     scale = (1 / torch.abs(centered_inp).max()) * 0.999999
-#     normalized_inp = centered_inp * scale
-#
-#     return normalized_inp
+
+def all_edges(num_nodes):
+    nodes = torch.arange(num_nodes)
+    row, col = torch.meshgrid(nodes, nodes, indexing='ij')
+    edge_index = torch.stack([row.reshape(-1), col.reshape(-1)], dim=0)
+
+    return edge_index

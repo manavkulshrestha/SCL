@@ -1,6 +1,6 @@
 import torch
 from torch.nn import BatchNorm2d, LeakyReLU, Dropout, BatchNorm1d
-from torch_geometric.nn import GCNConv, PointNetConv, global_max_pool, MLP, radius, fps
+from torch_geometric.nn import GCNConv, PointNetConv, global_max_pool, MLP, radius, fps, GATv2Conv
 from torch_geometric.nn.dense.linear import Linear
 from torch import nn
 from utility import sliding, sample_exact, normalize, device
@@ -30,7 +30,6 @@ class DependenceNet(torch.nn.Module):
     @classmethod
     def decode_all(cls, z):
         return (z @ z.t() > 0).nonzero().t()
-
 
 
 class SAModule(torch.nn.Module):
@@ -125,8 +124,8 @@ class ObjectNet(nn.Module):
 class DNEncoder(torch.nn.Module):
     def __init__(self, in_c, h_c, out_c):
         super().__init__()
-        self.layer1 = GCNConv(in_c, h_c)
-        self.layer2 = GCNConv(h_c, out_c)
+        self.layer1 = GATv2Conv(in_c, h_c)
+        self.layer2 = GATv2Conv(h_c, out_c)
         self.activation = LeakyReLU()
 
     def forward(self, x, edge_index):
@@ -140,17 +139,19 @@ class DNEncoder(torch.nn.Module):
 class DNDecoder(torch.nn.Module):
     def __init__(self, h_c):
         super().__init__()
-        hcdiv2 = h_c//2
-        self.linear1 = Linear(h_c, hcdiv2)
-        self.linear2 = Linear(hcdiv2, 1)
+        self.linear1 = Linear(2*h_c, h_c)
+        self.linear2 = Linear(h_c, 1)
         self.activation = LeakyReLU()
 
-    def forward(self, z):
-        z = self.linear1(z)
-        z = self.activation(z)
-        z = self.linear2(z)
+    def forward(self, z, edge_label_index):
+        row, col = edge_label_index
+        zc = torch.cat([z[row], z[col]], dim=1)
 
-        return z
+        zc = self.linear1(zc)
+        zc = self.activation(zc)
+        zc = self.linear2(zc)
+
+        return zc.view(-1)
 
 
 class DNet(torch.nn.Module):
@@ -160,8 +161,8 @@ class DNet(torch.nn.Module):
         self.decoder = DNDecoder(out_channels)
         self.loss = torch.nn.BCEWithLogitsLoss()
 
-    def forward(self, x, edge_label_index):
-        z = self.encoder(x)
-        x = self.decoder(z, edge_label_index)
+    def forward(self, x, edge_index):
+        z = self.encoder(x, edge_index)
+        out = self.decoder(z, edge_index)
 
-        return x
+        return out

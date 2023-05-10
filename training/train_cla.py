@@ -1,12 +1,9 @@
 import torch
 import torch.nn.functional as F
 
-import os.path as osp
-import numpy as np
-import tqdm
-
-from utility import get_objdataloaders, save_model, device
-from Network import ObjectNet
+from Datasets.dutility import get_objdataloaders
+from utility import save_model, device
+from nn.Network import ObjectNet
 
 
 def loss_fn(pred, target):

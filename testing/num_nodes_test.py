@@ -1,9 +1,9 @@
 import numpy as np
 from torch_geometric.data import DataLoader
 
-from Dataset import DependenceDataset
-from Network import ObjectNet
-from utility import PDPATH, DDPATH
+from Datasets.Dataset import DependenceDataset
+from nn.Network import ObjectNet
+from Datasets.dutility import PDPATH, DDPATH
 
 import torch
 import torch_geometric.transforms as T
