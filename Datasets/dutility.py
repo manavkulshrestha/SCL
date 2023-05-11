@@ -19,7 +19,7 @@ def get_depdataloaders(feat_net):
     val_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(8000, 9000), transform=transform, sample_count=sc)
     test_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(9000, 10000), transform=transform, sample_count=sc)
 
-    train_loader = DataLoader(train_dataset, batch_size=10, shuffle=True)  # num workers causes error
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)  # num workers causes error
     val_loader = DataLoader(val_dataset, batch_size=64, shuffle=True)  # num workers causes error
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)  # num workers causes error
 

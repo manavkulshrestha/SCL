@@ -122,10 +122,10 @@ class ObjectNet(nn.Module):
 
 
 class DNEncoder(torch.nn.Module):
-    def __init__(self, in_c, h_c, out_c):
+    def __init__(self, in_c, h_c, out_c, heads=8, concat=False):
         super().__init__()
-        self.layer1 = GATv2Conv(in_c, h_c, heads=8, concat=False)
-        self.layer2 = GATv2Conv(h_c, out_c, heads=8, concat=False)
+        self.layer1 = GATv2Conv(in_c, h_c, heads=heads, concat=concat)
+        self.layer2 = GATv2Conv(h_c, out_c, heads=heads, concat=concat)
         self.activation = LeakyReLU()
 
     def forward(self, x, edge_index):
@@ -137,7 +137,7 @@ class DNEncoder(torch.nn.Module):
 
 
 class DNDecoder(torch.nn.Module):
-    def __init__(self, h_c):
+    def __init__(self, h_c, **kwargs):
         super().__init__()
         self.linear1 = Linear(2*h_c, h_c)
         self.linear2 = Linear(h_c, 1)
@@ -155,10 +155,10 @@ class DNDecoder(torch.nn.Module):
 
 
 class DNet(torch.nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels):
+    def __init__(self, in_channels, hidden_channels, out_channels, **kwargs):
         super().__init__()
-        self.encoder = DNEncoder(in_channels, hidden_channels, out_channels)
-        self.decoder = DNDecoder(out_channels)
+        self.encoder = DNEncoder(in_channels, hidden_channels, out_channels, **kwargs)
+        self.decoder = DNDecoder(out_channels, **kwargs)
         self.loss = torch.nn.BCEWithLogitsLoss()
 
     def forward(self, x, edge_index):

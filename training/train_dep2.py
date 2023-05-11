@@ -31,17 +31,18 @@ def train_epoch(model, epoch, loader, optimizer, progress=False):
         batch = batch.to(device)
         optimizer.zero_grad()
 
-        gt_e_idx = batch.edge_index
+        gt_e_idx = batch.gt_e_idx
+        all_e_idx = batch.all_e_idx
+        all_e_y = batch.all_e_y
 
         # negative sampling for class imbalance
-        gt_e_idx_batch = batch.batch[gt_e_idx[0]]
-        n_e_idx = batched_negative_sampling(gt_e_idx, gt_e_idx_batch)
-        target_e_idx = torch.cat([gt_e_idx, n_e_idx], dim=1)
-        target_e_y = torch.cat([torch.ones(gt_e_idx.size(1)), torch.zeros(n_e_idx.size(1))]).cuda()
-        out = model(batch.x, target_e_idx)
+        # n_e_idx = batched_negative_sampling(gt_e_idx, batch.batch)
+        # target_e_idx = torch.cat([gt_e_idx, n_e_idx], dim=1)
+        # target_e_y = torch.cat([torch.ones(gt_e_idx.size(1)), torch.zeros(n_e_idx.size(1))]).cuda()
+        out = model(batch.x, all_e_idx)
 
         # get loss and update model
-        loss = loss_fn(out, target_e_y)
+        loss = loss_fn(out, all_e_y)
         loss.backward()
         optimizer.step()
         train_loss += loss.item() * batch.num_graphs
@@ -62,7 +63,7 @@ def test_epoch(model, epoch, loader, thresh=0.5, progress=False):
     for i, batch in enumerate(progress(loader, desc=f'[Epoch {epoch:03d}] testing')):
         batch = batch.to(device)
 
-        all_e_idx = batch.all_e_idx.T
+        all_e_idx = batch.all_e_idx
         all_e_y = batch.all_e_y
 
         if epoch % 100 and epoch > 0:
@@ -88,7 +89,7 @@ def main():
 
     train_loader, val_loader, test_loader = get_depdataloaders(feat_net)
 
-    model = DNet(511, 256, 128).to(device)
+    model = DNet(511, 256, 128, heads=16).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
 
     best_val_f1 = 0

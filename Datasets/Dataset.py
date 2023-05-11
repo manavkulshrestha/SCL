@@ -70,13 +70,26 @@ class ObjectDataset(InMemoryDataset):
         return f'{self.__class__.__name__}({self.out_channels})'
 
 
+class GraphData(Data):
+    def __inc__(self, key, value, *args, **kwargs):
+        if key in ['all_e_idx', 'gt_e_idx']:
+            return self.num_nodes
+        return super().__inc__(key, value, *args, **kwargs)
+
+    def __cat_dim__(self, key, value, *args, **kwargs):
+        if key in ['all_e_idx', 'gt_e_idx']:
+            return 1
+        return super().__cat_dim__(key, value, *args, **kwargs)
+
+
 class DependenceDataset(InMemoryDataset):
-    def __init__(self, pcd_root, dep_root, *, feat_net, chunk, transform=None, pre_transform=None, pre_filter=None, sample_count=None,
-                 train=True):
+    def __init__(self, pcd_root, dep_root, *, feat_net, chunk,
+                 transform=None, pre_transform=None, pre_filter=None, sample_count=None):
         self.chunk = chunk
         self.sample_count = sample_count
         self.pcd_root = pcd_root
         self.feat_net = feat_net
+        self.feat_net.eval()
         self.pos_enc = PositionalEncoding(min_deg=0, max_deg=5, scale=1, offset=0)
 
         super().__init__(dep_root, transform, pre_transform, pre_filter)
@@ -124,8 +137,8 @@ class DependenceDataset(InMemoryDataset):
             all_e_y = torch.tensor(dep_g[tuple(all_e_idx)]).view(-1)
 
             # x is nodes' features, gt_e_idx is ground truth links', all_e_y are labels for all_e_idx
-            data = Data(x=nodes_feats.cpu(), edge_index=gt_e_idx, all_e_idx=all_e_idx.T, all_e_y=all_e_y,
-                        num_nodes=len(node_ids), adj_mat=dep_g)
+            data = GraphData(x=nodes_feats.cpu(), gt_e_idx=gt_e_idx, all_e_idx=all_e_idx, all_e_y=all_e_y,
+                             num_nodes=len(node_ids), adj_mat=dep_g)
             data_list.append(data)
 
         return data_list

@@ -76,20 +76,20 @@ def make_pcd(xyz, colors=None):
 
 
 def visualize(pcd):
-    o3d.visualization.draw_geometries([pcd])
-    # viewer = o3d.visualization.Visualizer()
-    # viewer.create_window()
-    #
-    # viewer.add_geometry(pcd_yescol)
+    # o3d.visualization.draw_geometries([pcd])
+    viewer = o3d.visualization.Visualizer()
+    viewer.create_window()
+
+    viewer.add_geometry(pcd)
     # box = o3d.geometry.AxisAlignedBoundingBox([-1, -1, 0], [1, 1, 1])
     # box.color = [1, 0, 0]  # red color
     # # box.alpha = 0.1  # set alpha value to 0.1
     # viewer.add_geometry(box)
-    #
-    # opt = viewer.get_render_option()
-    # opt.show_coordinate_frame = True
-    # viewer.run()
-    # viewer.destroy_window()
+
+    opt = viewer.get_render_option()
+    opt.show_coordinate_frame = True
+    viewer.run()
+    viewer.destroy_window()
 
 
 def sample_exact(pcd, n):
@@ -115,3 +115,24 @@ def all_edges(num_nodes):
     edge_index = torch.stack([row.reshape(-1), col.reshape(-1)], dim=0)
 
     return edge_index
+
+
+def load_model(model_cls, name, model_args=[], model_kwargs={}, cuda=True):
+    model = model_cls(*model_args, **model_kwargs)
+    model.load_state_dict(torch.load(osp.join(MODELS_PATH, name)))
+
+    return model.cuda() if cuda else model
+
+
+def tid_name(tid):
+    return [
+        '[table]',
+        'cube',
+        'cylinder',
+        'ccuboid',
+        'scuboid',
+        'tcuboid',
+        'roof',
+        'pyramid',
+        'cuboid'
+    ][tid]
