@@ -124,7 +124,8 @@ class DependenceDataset(InMemoryDataset):
             all_e_y = torch.tensor(dep_g[tuple(all_e_idx)]).view(-1)
 
             # x is nodes' features, gt_e_idx is ground truth links', all_e_y are labels for all_e_idx
-            data = Data(x=nodes_feats.cpu(), edge_index=all_e_idx, all_e_y=all_e_y, num_nodes=len(node_ids), depg=dep_g)
+            data = Data(x=nodes_feats.cpu(), edge_index=gt_e_idx, all_e_idx=all_e_idx.T, all_e_y=all_e_y,
+                        num_nodes=len(node_ids), adj_mat=dep_g)
             data_list.append(data)
 
         return data_list

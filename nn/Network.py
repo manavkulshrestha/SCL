@@ -124,8 +124,8 @@ class ObjectNet(nn.Module):
 class DNEncoder(torch.nn.Module):
     def __init__(self, in_c, h_c, out_c):
         super().__init__()
-        self.layer1 = GATv2Conv(in_c, h_c)
-        self.layer2 = GATv2Conv(h_c, out_c)
+        self.layer1 = GATv2Conv(in_c, h_c, heads=8, concat=False)
+        self.layer2 = GATv2Conv(h_c, out_c, heads=8, concat=False)
         self.activation = LeakyReLU()
 
     def forward(self, x, edge_index):

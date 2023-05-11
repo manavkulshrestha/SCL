@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from sklearn.metrics import f1_score
-from torch_geometric.utils import negative_sampling
+from torch_geometric.utils import negative_sampling, batched_negative_sampling
 from torch.utils.tensorboard import SummaryWriter
 
 import numpy as np
@@ -31,14 +31,17 @@ def train_epoch(model, epoch, loader, optimizer, progress=False):
         batch = batch.to(device)
         optimizer.zero_grad()
 
-        all_e_idx = batch.edge_index
-        all_e_y = batch.all_e_y
+        gt_e_idx = batch.edge_index
 
         # negative sampling for class imbalance
-        out = model(batch.x, all_e_idx)
+        gt_e_idx_batch = batch.batch[gt_e_idx[0]]
+        n_e_idx = batched_negative_sampling(gt_e_idx, gt_e_idx_batch)
+        target_e_idx = torch.cat([gt_e_idx, n_e_idx], dim=1)
+        target_e_y = torch.cat([torch.ones(gt_e_idx.size(1)), torch.zeros(n_e_idx.size(1))]).cuda()
+        out = model(batch.x, target_e_idx)
 
         # get loss and update model
-        loss = loss_fn(out, all_e_y)
+        loss = loss_fn(out, target_e_y)
         loss.backward()
         optimizer.step()
         train_loss += loss.item() * batch.num_graphs
@@ -58,18 +61,19 @@ def test_epoch(model, epoch, loader, thresh=0.5, progress=False):
 
     for i, batch in enumerate(progress(loader, desc=f'[Epoch {epoch:03d}] testing')):
         batch = batch.to(device)
-        all_e_idx = batch.edge_index
+
+        all_e_idx = batch.all_e_idx.T
         all_e_y = batch.all_e_y
 
         if epoch % 100 and epoch > 0:
-            print('')
+            print('', end='')
 
         out = model(batch.x, all_e_idx)
         outs = out.sigmoid()
         pred = (outs > threshold).float()
 
         if epoch % 100 and epoch > 0:
-            print('')
+            print('', end='')
 
         score = f1_score(all_e_y.cpu().numpy(), pred.cpu().numpy())
         scores.append(score)
