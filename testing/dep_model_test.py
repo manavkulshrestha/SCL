@@ -96,8 +96,8 @@ def vis_test(model, loader, thresh=0.5):
         def sce_vis(i):
             visualize_scene(i)
 
-        # adj_vis(i, pred_adj, data.adj_mat[0])
-        sce_vis(i)
+        adj_vis(i, pred_adj, data.adj_mat[0])
+        # sce_vis(i)
         # plt.show()
 
 
@@ -106,7 +106,9 @@ def main():
     feat_net.eval()
     train_loader, val_loader, test_loader = get_depdataloaders(feat_net)
 
-    dep_net = load_model(DNet, 'dnT_best_model_fixnosam_gat8noconcat.pt', model_args=[511, 256, 128])
+    dep_net = load_model(DNet, 'dnT_best_model_GAT16.pt',
+                         model_args=[511, 256, 128], model_kwargs={'heads': 16, 'concat':False})
+    # dep_net = load_model(DNet, 'dnT_best_model_fixnosam_gat8noconcat.pt', model_args=[511, 256, 128])
     dep_net.eval()
 
     vis_test(dep_net, test_loader)

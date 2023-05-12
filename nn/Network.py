@@ -122,18 +122,21 @@ class ObjectNet(nn.Module):
 
 
 class DNEncoder(torch.nn.Module):
-    def __init__(self, in_c, h_c, out_c, heads=8, concat=False):
-        super().__init__()
-        self.layer1 = GATv2Conv(in_c, h_c, heads=heads, concat=concat)
-        self.layer2 = GATv2Conv(h_c, out_c, heads=heads, concat=concat)
-        self.activation = LeakyReLU()
+        def __init__(self, in_c, h_c, out_c, heads=8, concat=False):
+            super().__init__()
+            self.layer1 = GATv2Conv(in_c, h_c, heads=heads, concat=concat)
+            self.layer2 = GATv2Conv(h_c, out_c, heads=heads, concat=concat)
+            # self.layer3 = GATv2Conv(h_c, out_c, heads=heads, concat=concat)
+            self.activation = LeakyReLU()
 
-    def forward(self, x, edge_index):
-        x = self.layer1(x, edge_index)
-        x = self.activation(x)
-        x = self.layer2(x, edge_index)
+        def forward(self, x, edge_index):
+            x = self.layer1(x, edge_index)
+            x = self.activation(x)
+            x = self.layer2(x, edge_index)
+            # x = self.activation(x)
+            # x = self.layer3(x, edge_index)
 
-        return x
+            return x
 
 
 class DNDecoder(torch.nn.Module):
@@ -141,6 +144,7 @@ class DNDecoder(torch.nn.Module):
         super().__init__()
         self.linear1 = Linear(2*h_c, h_c)
         self.linear2 = Linear(h_c, 1)
+        # self.linear3 = Linear(h_c//2, 1)
         self.activation = LeakyReLU()
 
     def forward(self, z, edge_label_index):
@@ -150,6 +154,8 @@ class DNDecoder(torch.nn.Module):
         zc = self.linear1(zc)
         zc = self.activation(zc)
         zc = self.linear2(zc)
+        # zc = self.activation(zc)
+        # zc = self.linear3(zc)
 
         return zc.view(-1)
 
