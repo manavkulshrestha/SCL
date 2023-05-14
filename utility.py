@@ -11,6 +11,7 @@ MODELS_PATH = osp.join(RP_ROOT, 'models/')
 
 
 def sliding(lst, n):
+    """ returns a sliding window of size n over a list lst """
     for window in zip(*[lst[i:] for i in range(n)]):
         yield window
 
@@ -136,3 +137,18 @@ def tid_name(tid):
         'pyramid',
         'cuboid'
     ][tid]
+
+
+def name_tid(name):
+    """ returns the canonical type id for an object type, given its name """
+    return {
+        '[table]': 0,
+        'cube': 1,
+        'cylinder': 2,
+        'ccuboid': 3,
+        'scuboid': 4,
+        'tcuboid': 5,
+        'roof': 6,
+        'pyramid': 7,
+        'cuboid': 8
+    }[name]
