@@ -1,13 +1,15 @@
 import pybullet as p
 import pybullet_data
+
 import time
+from toposort import toposort
+import os.path as osp
 
 import torch
 from torch_geometric.data import Data
-
 import numpy as np
-from toposort import toposort
 
+from Datasets.dutility import PDPATH, DDPATH, get_depdataloaders
 from Generation.gen_lib import simulate_scene_pc, Camera, PBObjectLoader
 from nn.Network import ObjectNet, DNet
 from nn.PositionalEncoder import PositionalEncoding
@@ -61,7 +63,7 @@ def remove_objects(loader):
         p.removeBody(oid)
 
 
-def get_obj_feats(obj_pcd, sample_count=512, *, feat_net, pos_enc):
+def get_obj_feats(obj_pcd, sample_count=512, *, feat_model, pos_enc):
     """ returns the features for an object from its point cloud """
     obj_cen = obj_pcd.mean(axis=0)
 
@@ -71,7 +73,7 @@ def get_obj_feats(obj_pcd, sample_count=512, *, feat_net, pos_enc):
 
     # get total features from positional encoding of centroid and object level features from network
     cen_ten = torch.tensor(obj_cen, dtype=torch.float).cuda()
-    pred_tid, obj_emb = feat_net.embed(obj_pcd, get_pred=True)
+    pred_tid, obj_emb = feat_model.embed(obj_pcd, get_pred=True)
 
     obj_emb = torch.squeeze(obj_emb)
     pos_emb = pos_enc(cen_ten)
@@ -114,9 +116,8 @@ def dep_graph(node_ids):
     return depg
 
 
-def initial_graph(goal_loader, pcds, oids, feat_net_name):
+def initial_graph(goal_loader, pcds, oids, *, feat_model):
     """ takes scene point cloud and returns an initial scene graph """
-    feat_net = load_model(ObjectNet, feat_net_name).cuda()
     pos_enc = PositionalEncoding(min_deg=0, max_deg=5, scale=1, offset=0).cuda()
 
     nodes_feats = []
@@ -125,19 +126,18 @@ def initial_graph(goal_loader, pcds, oids, feat_net_name):
         # name = goal_loader.oid_typ_map[oid]
         # tid = name_tid(name)
 
-        node_feats, pred_tid = get_obj_feats(pcd, feat_net=feat_net, pos_enc=pos_enc)
+        node_feats, pred_tid = get_obj_feats(pcd, feat_model=feat_model, pos_enc=pos_enc)
 
         nodes_feats.append(node_feats)
 
     return Data(x=torch.stack(nodes_feats).cpu(), all_e_idx=all_edges(len(nodes_feats)), num_nodes=len(nodes_feats))
 
 
-def scene_graph(node_graph, *, dep_model_name, thresh=0.5):
-    dep_net = load_model(DNet, dep_model_name, model_args=[511, 256, 128], model_kwargs={'heads': 16}).cuda()
+def scene_graph(node_graph, *, dep_model, thresh=0.5):
     node_graph = node_graph.cuda()
     threshold = torch.tensor(thresh).cuda()
 
-    out = dep_net(node_graph.x, node_graph.all_e_idx)
+    out = dep_model(node_graph.x, node_graph.all_e_idx)
     outs = out.sigmoid()
     pred = (outs > threshold).float()
 
@@ -148,22 +148,53 @@ def scene_graph(node_graph, *, dep_model_name, thresh=0.5):
     return pred_adj
 
 
+def load_scene(scene_num):
+    scene_name = f'{scene_num // 1000}_{scene_num % 1000}.npz'
+    pcd_path = osp.join(PDPATH, scene_name)
+    dep_path = osp.join(DDPATH, scene_name)
+
+    pcd_file = np.load(pcd_path)
+    dep_file = np.load(dep_path)
+    pcds, tids, oids = [pcd_file[x] for x in ['pc', 'tid', 'oid']]
+    node_ids, dep_g = [dep_file[x] for x in ['node_ids', 'depg']]
+
+    return pcds, oids
+
+
 def main():
-    seed = np.random.randint(0, 10000)
+    seed = 1369 or np.random.randint(0, 10000)
     print(f'SEED: {seed}')
     np.random.seed(seed)
 
+    # load models
+    feat_net = load_model(ObjectNet, 'cn_test_best_model.pt')
+    feat_net.eval()
+    dep_net = load_model(DNet, 'dnT_best_model_GAT16.pt',
+                         model_args=[511, 256, 128], model_kwargs={'heads': 16, 'concat': False})
+    dep_net.eval()
+
+    # setup the environment
     setup_basic()
-
     cams = [Camera(pos) for pos in [[0.15, 0.15, .2], [0.15, -0.15, .2], [0, 0, .3]]]
-    goal_loader, pcds, oids = simulate_scene_pc(cams)
 
-    node_graph = initial_graph(goal_loader, pcds, oids, feat_net_name='cn_test_best_model.pt')
-    gt_graph = dep_graph(np.arange(node_graph.num_nodes)+1)
-    pred_graph = scene_graph(node_graph, dep_model_name='dnT_best_model_GAT16.pt')
+    # set up the target scene
+    # goal_loader, pcds, oids = simulate_scene_pc(cams)
+    # # goal_loader, (pcds, oids) = None, load_scene(9000)
+    _, _, test_loader = get_depdataloaders(feat_net)
+    node_graph = test_loader.dataset[0]
+    node_graph.gt_e_idx = None
+    node_graph.all_e_y = None
+    node_graph.adj_mat = None
+
+    # infer scene structure
+    # node_graph = initial_graph(goal_loader, pcds, oids, feat_model=feat_net)
+    # gt_graph = dep_graph(np.arange(node_graph.num_nodes)+1)
+    pred_graph = scene_graph(node_graph, dep_model=dep_net)
+
+
 
     time.sleep(1)
-    remove_objects(goal_loader)
+    # remove_objects(goal_loader)
 
     curr_loader = setup_field(goal_loader)
 
