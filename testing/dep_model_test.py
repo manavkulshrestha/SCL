@@ -80,11 +80,16 @@ def vis_test(model, loader, thresh=0.5):
 
         pred_adj = np.zeros((data.num_nodes, data.num_nodes))
         pred_e_idx = data.all_e_idx[:, pred.bool()].cpu().numpy()
-        pred_adj[tuple(pred_e_idx)] = 1
+
+        pred_adj[tuple(data.all_e_idx.cpu().numpy())] = outs.cpu().numpy()
 
         def adj_vis(i, pred_adj, adj_mat):
+
+            pred_adj_ones = np.zeros_like(pred_adj)
+            pred_adj_ones[pred_adj > 0.5] = 1
+
             fig, axes = plt.subplots(1, 2)
-            visualize_graph(pred_adj, *scene_graph_info(i), ax=axes[0])
+            visualize_graph(pred_adj_ones, *scene_graph_info(i), ax=axes[0])
             visualize_graph(adj_mat, *scene_graph_info(i), ax=axes[1])
             axes[0].title.set_text('Predicted')
             axes[1].title.set_text('Ground Truth')
@@ -106,7 +111,7 @@ def main():
     feat_net.eval()
     train_loader, val_loader, test_loader = get_depdataloaders(feat_net)
 
-    dep_net = load_model(DNet, 'dnT_best_model_GAT16.pt',
+    dep_net = load_model(DNet, 'dnT_best_model.pt',
                          model_args=[511, 256, 128], model_kwargs={'heads': 16, 'concat':False})
     # dep_net = load_model(DNet, 'dnT_best_model_fixnosam_gat8noconcat.pt', model_args=[511, 256, 128])
     dep_net.eval()

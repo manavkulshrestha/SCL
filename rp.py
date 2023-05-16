@@ -169,7 +169,8 @@ def main():
     # load models
     feat_net = load_model(ObjectNet, 'cn_test_best_model.pt')
     feat_net.eval()
-    dep_net = load_model(DNet, 'dnT_best_model_GAT16.pt',
+
+    dep_net = load_model(DNet, 'dnT_best_model_95_nn.pt',
                          model_args=[511, 256, 128], model_kwargs={'heads': 16, 'concat': False})
     dep_net.eval()
 
@@ -180,11 +181,20 @@ def main():
     # set up the target scene
     # goal_loader, pcds, oids = simulate_scene_pc(cams)
     # # goal_loader, (pcds, oids) = None, load_scene(9000)
-    _, _, test_loader = get_depdataloaders(feat_net)
+    test_loader, _, _ = get_depdataloaders(feat_net, shuffles=(False, False, False))
     node_graph = test_loader.dataset[0]
     node_graph.gt_e_idx = None
     node_graph.all_e_y = None
     node_graph.adj_mat = None
+
+    pred_tids = []
+    for node_feats in node_graph.x:
+        obj_feats = node_feats[255:]
+        pred_tid = feat_net.predict_fromfeatures(obj_feats)
+        pred_tids.append(pred_tid)
+
+    pred_names = [tid_name(tid) for tid in pred_tids]
+    print(pred_names)
 
     # infer scene structure
     # node_graph = initial_graph(goal_loader, pcds, oids, feat_model=feat_net)

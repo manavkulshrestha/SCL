@@ -8,20 +8,21 @@ DDPATH = osp.join(RP_ROOT, 'data/dep_data/')
 PDPATH = osp.join(RP_ROOT, 'data/pcd_data/')
 
 
-def get_depdataloaders(feat_net):
+def get_depdataloaders(feat_net, chunks=((0, 8000), (8000, 9000), (9000, 10000)),
+                       batch_sizes=(64, 64, 1), shuffles=(True, True, False)):
     transform = T.Compose([
-        T.NormalizeFeatures(),
+        # T.NormalizeFeatures(),
         T.ToDevice('cuda'),
     ])
 
     sc = 512
-    train_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(0, 8000), transform=transform, sample_count=sc)
-    val_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(8000, 9000), transform=transform, sample_count=sc)
-    test_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=(9000, 10000), transform=transform, sample_count=sc)
+    train_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=chunks[0], transform=transform, sample_count=sc)
+    val_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=chunks[1], transform=transform, sample_count=sc)
+    test_dataset = DependenceDataset(PDPATH, DDPATH, feat_net=feat_net, chunk=chunks[2], transform=transform, sample_count=sc)
 
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)  # num workers causes error
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=True)  # num workers causes error
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)  # num workers causes error
+    train_loader = DataLoader(train_dataset, batch_size=batch_sizes[0], shuffle=shuffles[0])  # num workers causes error
+    val_loader = DataLoader(val_dataset, batch_size=batch_sizes[1], shuffle=shuffles[1])  # num workers causes error
+    test_loader = DataLoader(test_dataset, batch_size=batch_sizes[2], shuffle=shuffles[2])  # num workers causes error
 
     return train_loader, val_loader, test_loader
 

@@ -120,6 +120,12 @@ class ObjectNet(nn.Module):
 
             return (pred_tid, emb) if get_pred else emb
 
+    def predict_fromfeatures(self, emb, max_ax=0):
+        with torch.no_grad():
+            out = self.mlp.lins[-1](emb)
+            outs = out.log_softmax(dim=-1)
+
+            return outs.max(max_ax)[1].item() + 1
 
 class DNEncoder(torch.nn.Module):
         def __init__(self, in_c, h_c, out_c, heads=8, concat=False):

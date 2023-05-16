@@ -4,6 +4,7 @@ import os.path as osp
 import torch
 
 from nn.Network import ObjectNet
+from utility import tid_name, visualize, make_pcd, load_model
 
 RP_ROOT = osp.abspath('/home/mk/rp/')
 DDPATH = osp.join(RP_ROOT, 'data/dep_data/')
@@ -47,11 +48,14 @@ def tid_colors(typeidx):
 
 
 def main():
-    cla_net = ObjectNet().cuda()
-    mp = osp.join(MODELS_PATH, 'cn_model-200.pt')
-    # mp = '/home/mk/rp/models/cn_test_model-20.pt'
-    cla_net.load_state_dict(torch.load(mp))
-    cla_net.cuda()
+    # cla_net = ObjectNet().cuda()
+    # mp = osp.join(MODELS_PATH, 'cn_model-200.pt')
+    # # mp = '/home/mk/rp/models/cn_test_model-20.pt'
+    # cla_net.load_state_dict(torch.load(mp))
+    # cla_net.cuda()
+    # cla_net.eval()
+    # cla_net = load_model(ObjectNet, 'cn_test_best_model.pt')
+    cla_net = load_model(ObjectNet, 'cn_model-200.pt')
     cla_net.eval()
 
     rp_root = osp.abspath('/home/mk/rp')
@@ -59,7 +63,7 @@ def main():
     pcd_root = osp.join(rp_root, 'data/pcd_data/')
     dep_root = osp.join(rp_root, 'data/dep_data/')
 
-    i = 1000
+    i = 0
 
     file_name = f'{i // 1000}_{i % 1000}.npz'
     pcd_file = np.load(osp.join(pcd_root, file_name))
@@ -67,22 +71,19 @@ def main():
     pcds, o_ids, t_ids = [pcd_file[x] for x in ['pc', 'oid', 'tid']]
     node_ids, dep_g = [dep_file[x] for x in ['node_ids', 'depg']]
 
-    types = ['cube', 'cylinder', 'ccuboid', 'scuboid', 'tcuboid', 'roof', 'pyramid', 'cuboid']
     oid_tid = dict(zip(o_ids, t_ids))
-    tid_name = dict(enumerate(types, start=1))
-    name = lambda oid: tid_name[oid_tid[oid]]
 
     for nid in np.unique(o_ids).astype(int):
         obj_pcd = pcds[o_ids == nid]
 
-        # pos = torch.tensor(sample_exact(normalize(obj_pcd), 512)).cuda().float()
-        # model_input = Data(pos=pos)
+        # pred_tid = cla_net.predict(obj_pcd)
+        pred_tid1, embed = cla_net.embed(obj_pcd, get_pred=True)
+        pred_tid2 = cla_net.predict_fromfeatures(embed, max_ax=1)
+        tid = oid_tid[nid]
 
-        # outs = cla_net(model_input, nobatch=True)
-        # pred_tid = outs.max(1)[1].item() + 1
-        pred_tid = cla_net.predict(obj_pcd)
-        print(f'{nid} is a {name(nid)}, predicted: {tid_name[pred_tid]}')
-    # visualize(make_pcd(pcds, colors=tid_colors(t_ids)))
+        print(f'{nid} is a {tid_name(tid)}, predicted: {tid_name(pred_tid2)}')
+    visualize(make_pcd(pcds, colors=tid_colors(t_ids)))
+
 
 if __name__ == '__main__':
     main()
