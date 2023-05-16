@@ -13,7 +13,9 @@ from Datasets.dutility import PDPATH, DDPATH, get_depdataloaders
 from Generation.gen_lib import simulate_scene_pc, Camera, PBObjectLoader
 from nn.Network import ObjectNet, DNet
 from nn.PositionalEncoder import PositionalEncoding
-from utility import load_model, all_edges, name_tid, tid_name
+from robot.robot import UR5
+from testing.tutility import print_dep
+from utility import load_model, all_edges, name_tid, tid_name, map_dict, draw_sphere_marker
 
 
 def setup_basic():
@@ -116,16 +118,13 @@ def dep_graph(node_ids):
     return depg
 
 
-def initial_graph(goal_loader, pcds, oids, *, feat_model):
+def initial_graph(pcds, oids, *, feat_model):
     """ takes scene point cloud and returns an initial scene graph """
     pos_enc = PositionalEncoding(min_deg=0, max_deg=5, scale=1, offset=0).cuda()
 
     nodes_feats = []
     for oid in np.unique(oids):  # in real, oid is gotten by instance segmentation
         pcd = pcds[oid == oids]
-        # name = goal_loader.oid_typ_map[oid]
-        # tid = name_tid(name)
-
         node_feats, pred_tid = get_obj_feats(pcd, feat_model=feat_model, pos_enc=pos_enc)
 
         nodes_feats.append(node_feats)
@@ -161,6 +160,16 @@ def load_scene(scene_num):
     return pcds, oids
 
 
+def dep_dict(adj_mat):
+    """ creates a dictionary representation of the graph """
+    return {i: set(np.nonzero(row)[0]) for i, row in enumerate(adj_mat)}
+
+
+def get_target_pose(loader_t, oid):
+    """ get position and orientation, in real this is from teaser++ and point cloud centroid """
+    return loader_t.obj_poses[oid]
+
+
 def main():
     seed = 1369 or np.random.randint(0, 10000)
     print(f'SEED: {seed}')
@@ -179,35 +188,63 @@ def main():
     cams = [Camera(pos) for pos in [[0.15, 0.15, .2], [0.15, -0.15, .2], [0, 0, .3]]]
 
     # set up the target scene
-    # goal_loader, pcds, oids = simulate_scene_pc(cams)
-    # # goal_loader, (pcds, oids) = None, load_scene(9000)
-    test_loader, _, _ = get_depdataloaders(feat_net, shuffles=(False, False, False))
-    node_graph = test_loader.dataset[0]
-    node_graph.gt_e_idx = None
-    node_graph.all_e_y = None
-    node_graph.adj_mat = None
-
-    pred_tids = []
-    for node_feats in node_graph.x:
-        obj_feats = node_feats[255:]
-        pred_tid = feat_net.predict_fromfeatures(obj_feats)
-        pred_tids.append(pred_tid)
-
-    pred_names = [tid_name(tid) for tid in pred_tids]
-    print(pred_names)
+    goal_state, pcds, oids = simulate_scene_pc(cams, slow=False, wait=100)
 
     # infer scene structure
-    # node_graph = initial_graph(goal_loader, pcds, oids, feat_model=feat_net)
-    # gt_graph = dep_graph(np.arange(node_graph.num_nodes)+1)
+    node_graph = initial_graph(pcds, oids, feat_model=feat_net)
+    gt_graph = dep_graph(goal_state.obj_ids)
     pred_graph = scene_graph(node_graph, dep_model=dep_net)
+    assert (gt_graph == pred_graph).all()
 
+    print_dep(pred_graph, goal_state.obj_ids, lambda oid: goal_state.oid_typ_map[oid])
 
-
+    # set up workspace for rearrangement
     time.sleep(1)
-    # remove_objects(goal_loader)
+    remove_objects(goal_state)
+    curr_state = setup_field(goal_state)
+    robot = UR5([-0.5, 0, 0])
+    for _ in range(100):
+        p.stepSimulation()
 
-    curr_loader = setup_field(goal_loader)
+    # do planning and rearrangement
+    graph_dict = dep_dict(pred_graph)
+    topo_layers = toposort(graph_dict)
+    # for layer in topo_layers:
+    #     for obj_idx in layer:
 
+    obj_idx = 0
+    coid = curr_state.obj_ids[obj_idx]
+    goid = goal_state.obj_ids[obj_idx]
+
+    cpos, corn = p.getBasePositionAndOrientation(coid)
+    gpos, gorn = get_target_pose(goal_state, goid)
+
+    cpos = (cpos[0], cpos[1], cpos[2]+0.1)
+
+    draw_sphere_marker(cpos, radius=0.02)
+
+    aq_tar, aq_cur = robot.move_ee(cpos, orn=None)
+    # aq_tar, aq_cur = robot.move_ee(cpos, orn=(0, 0, 0, 1))
+    for _ in range(1000):
+        p.stepSimulation()
+
+    ee_pos = robot.ee_pose[0]
+    ee_fra = robot.ee_frame[0]
+
+    print('done moving ee')
+    print(f'target xy={cpos}, current xy={ee_pos}')
+
+    # draw_sphere_marker(robot.ee_pos, color=(1, 0, 0, 1))
+    q_ee = np.array(p.calculateInverseKinematics(robot.id, robot.ee_id, ee_pos, targetOrientation=(0, 0, 0, 1)))
+    draw_sphere_marker(ee_fra, color=(1, 0, 0, 1))
+    draw_sphere_marker(ee_pos, color=(0, 1, 0, 1))
+
+    time.sleep(1000)
+    # robot.suction(True)
+    # robot.move_ee(gpos, orn=gorn)
+    # robot.suction(False)
+
+    #
     time.sleep(20)
 
 

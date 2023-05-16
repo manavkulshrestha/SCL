@@ -3,6 +3,7 @@ from scipy.sparse import coo_matrix
 from os import path as osp
 import torch
 import open3d as o3d
+import pybullet as p
 
 
 device = torch.device('cuda')
@@ -152,3 +153,13 @@ def name_tid(name):
         'pyramid': 7,
         'cuboid': 8
     }[name]
+
+
+def map_dict(dict, lst):
+    return [dict[x] for x in lst]
+
+
+def draw_sphere_marker(position, radius=0.02, color=(0, 0, 1, 1)):
+    vs_id = p.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
+    marker_id = p.createMultiBody(basePosition=position, baseCollisionShapeIndex=-1, baseVisualShapeIndex=vs_id)
+    return marker_id

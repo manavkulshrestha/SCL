@@ -536,7 +536,7 @@ class PBObjectLoader:
         self.obj_poses = {}
         self.asset_root = os.path.abspath(asset_root)
 
-    def load_obj(self, otype, pos=(0, 0, 0), quat=None, euler=None, wait=0, wait_debug=False, slow=False):
+    def load_obj(self, otype, pos=(0, 0, 0), quat=None, euler=None, wait=100, wait_debug=False, slow=False):
         if euler is not None:  # not really idiot proof
             quat = p.getQuaternionFromEuler(euler)
         elif quat is None:
@@ -590,7 +590,7 @@ class PBObjectLoader:
 PLANE_ROOT = os.path.abspath('urdf')
 
 
-def simulate_scene_pc(cameras, ret_img=False):
+def simulate_scene_pc(cameras, ret_img=False, slow=False, wait=0):
     loader = PBObjectLoader('Generation/urdfc')
 
     otypes = list(OM_MAP.keys())
@@ -639,7 +639,7 @@ def simulate_scene_pc(cameras, ret_img=False):
                 attempt = 10
 
                 # add to pybullet and collisionmanager
-                o_id = loader.load_obj(c_typ, euler=c_orn, pos=c_pos, wait=100)
+                o_id = loader.load_obj(c_typ, euler=c_orn, pos=c_pos, wait=wait, slow=slow)
                 cm0.add_object(str(o_id), c_mesh)
                 #             print('placed', o_id)
                 #             input()
@@ -671,7 +671,7 @@ def simulate_scene_pc(cameras, ret_img=False):
                 if not cmi.in_collision_single(pmesh):
                     #             if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
                     #                 print('SUCCESS!', tdis)
-                    o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=100)
+                    o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
                     level[1].append(o_id)
                     level0_avail -= {o_id1, o_id2}
         #             else:
@@ -699,7 +699,7 @@ def simulate_scene_pc(cameras, ret_img=False):
             if not cmi.in_collision_single(pmesh):
                 #         if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
                 #             print('SUCCESS! single')
-                o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=100)
+                o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
                 level[1].append(o_id)
         #         else:
         #             print('FAILURE! single')
@@ -727,7 +727,7 @@ def simulate_scene_pc(cameras, ret_img=False):
 
                 if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
                     #                 print('SUCCESS!', tdis)
-                    o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=100)
+                    o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
                     level[2].append(o_id)
                     level1_avail -= {o_id1, o_id2}
         #             else:
@@ -749,7 +749,7 @@ def simulate_scene_pc(cameras, ret_img=False):
 
             if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
                 #             print('SUCCESS!', tdis)
-                o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=100)
+                o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
                 level[1].append(o_id)
     #         else:
     #             print('FAILURE!', tdis)
