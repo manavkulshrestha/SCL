@@ -460,7 +460,7 @@ class Camera():
             cameraTargetPosition=self.target,
             cameraUpVector=self.up_vec)
 
-    def __init__(self, pos, target=[0, 0, 0], height=512, width=512):
+    def __init__(self, pos, target=(0, 0, 0), height=512, width=512):
         #         self.pos_vec = np.array(pos)
         #         self.target = np.array(target)
         self.reset_view(pos=pos, target=target)

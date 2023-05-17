@@ -170,6 +170,16 @@ def get_target_pose(loader_t, oid):
     return loader_t.obj_poses[oid]
 
 
+def get_suc_point(pcds, oids, oid, epsilon=0.00001):
+    o_pcd = pcds[oids == oid]
+
+    max_z = np.max(o_pcd[:, 2])
+    uppermost_idx = (o_pcd[:, 2] >= max_z - epsilon) & (o_pcd[:, 2] <= max_z + epsilon)
+
+    uppermost_pts = o_pcd[uppermost_idx]
+    return uppermost_pts.mean(axis=0)
+
+
 def main():
     seed = 1369 or np.random.randint(0, 10000)
     print(f'SEED: {seed}')
@@ -196,12 +206,13 @@ def main():
     pred_graph = scene_graph(node_graph, dep_model=dep_net)
     assert (gt_graph == pred_graph).all()
 
-    print_dep(pred_graph, goal_state.obj_ids, lambda oid: goal_state.oid_typ_map[oid])
-
     # set up workspace for rearrangement
     time.sleep(1)
     remove_objects(goal_state)
     curr_state = setup_field(goal_state)
+    cam4_pos = [-0.25, 0, 0.5]
+    cam4 = Camera(cam4_pos, target=[*cam4_pos[:2], 0])
+    c_pcds, c_oids = cam4.get_point_cloud()
     robot = UR5([-0.5, 0, 0])
     for _ in range(100):
         p.stepSimulation()
@@ -209,43 +220,29 @@ def main():
     # do planning and rearrangement
     graph_dict = dep_dict(pred_graph)
     topo_layers = toposort(graph_dict)
-    # for layer in topo_layers:
-    #     for obj_idx in layer:
 
-    obj_idx = 0
-    coid = curr_state.obj_ids[obj_idx]
-    goid = goal_state.obj_ids[obj_idx]
+    above_field = [-0.25, 0, 0.2]
+    above_scene = [0, 0, 0.2]
 
-    cpos, corn = p.getBasePositionAndOrientation(coid)
-    gpos, gorn = get_target_pose(goal_state, goid)
+    # TESTING
+    for layer in topo_layers:
+        for obj_idx in layer:
+            c_oid = curr_state.obj_ids[obj_idx]
+            g_oid = goal_state.obj_ids[obj_idx]
 
-    cpos = (cpos[0], cpos[1], cpos[2]+0.1)
+            # cpos, corn = p.getBasePositionAndOrientation(coid)
+            g_pos, g_orn = get_target_pose(goal_state, g_oid)
+            c_pos = get_suc_point(c_pcds, c_oids, c_oid)-[0, 0, 0.001] #FIRST MOVE DIRECTLY ABOVE OBJECT
 
-    draw_sphere_marker(cpos, radius=0.02)
+            robot.move_ee(c_pos, orn=(0, 0, 0, 1))
+            robot.suction(True)
+            robot.move_ee(above_field)
 
-    aq_tar, aq_cur = robot.move_ee(cpos, orn=None)
-    # aq_tar, aq_cur = robot.move_ee(cpos, orn=(0, 0, 0, 1))
-    for _ in range(1000):
-        p.stepSimulation()
-
-    ee_pos = robot.ee_pose[0]
-    ee_fra = robot.ee_frame[0]
-
-    print('done moving ee')
-    print(f'target xy={cpos}, current xy={ee_pos}')
-
-    # draw_sphere_marker(robot.ee_pos, color=(1, 0, 0, 1))
-    q_ee = np.array(p.calculateInverseKinematics(robot.id, robot.ee_id, ee_pos, targetOrientation=(0, 0, 0, 1)))
-    draw_sphere_marker(ee_fra, color=(1, 0, 0, 1))
-    draw_sphere_marker(ee_pos, color=(0, 1, 0, 1))
+            robot.move_ee(g_pos, orn=(0, 0, 0, 1)) #MOVE DIRECTLY ABOVE WHERE TO PLACE
+            robot.suction(False)
+            robot.move_ee(above_scene)
 
     time.sleep(1000)
-    # robot.suction(True)
-    # robot.move_ee(gpos, orn=gorn)
-    # robot.suction(False)
-
-    #
-    time.sleep(20)
 
 
 if __name__ == '__main__':

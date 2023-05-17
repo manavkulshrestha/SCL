@@ -55,33 +55,33 @@ class UR5:
 
         return jointPoses
 
-    def move_ee(self, pos, orn=None, error_thresh=0.0005):
-        q_tar = np.array(p.calculateInverseKinematics(self.id, self.ee_id, pos, targetOrientation=orn))
+    def move_ee(self, pos, orn=None, error_thresh=0.02):
+        while True:
+            q_tar = np.array(p.calculateInverseKinematics(self.id, self.ee_id, pos, targetOrientation=orn))
+            q_cur = np.array([q_state[0] for q_state in p.getJointStates(self.id, self.joints)])
+            err = np.linalg.norm(q_tar - q_cur)
 
-        # while True:
-        #     q_cur = np.array([q_state[0] for q_state in p.getJointStates(self.id, self.joints)])
-        #     err = np.linalg.norm(q_tar - q_cur)
-        #
-        #     print(f'{q_tar=}')
-        #     print(f'{q_cur=}')
-        #     print(f'{err=}')
-        #
-        #     if err < error_thresh:
-        #         break
-        #
-        #     p.setJointMotorControlArray(bodyUniqueId=self.id,
-        #                                 jointIndices=self.joints,
-        #                                 controlMode=p.POSITION_CONTROL,
-        #                                 targetPositions=q_tar)
-        #
-        #     p.stepSimulation()
-        #     time.sleep(1 / 24)
-        #
-        # return q_tar, q_cur
+            # print(f'{q_tar=}')
+            # print(f'{q_cur=}')
+            # print(f'{err=}')
 
-        self.set_joints(q_tar)
+            print(err)
+            if err < error_thresh:
+                break
 
-        return q_tar, q_tar
+            p.setJointMotorControlArray(bodyUniqueId=self.id,
+                                        jointIndices=self.joints,
+                                        controlMode=p.POSITION_CONTROL,
+                                        targetPositions=q_tar)
+
+            p.stepSimulation()
+            time.sleep(1 / 24)
+
+        return q_tar, q_cur
+        #
+        # self.set_joints(q_tar)
+        #
+        # return q_tar, q_tar
 
     def suction(self, on):
         if on:
