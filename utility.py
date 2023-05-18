@@ -155,11 +155,18 @@ def name_tid(name):
     }[name]
 
 
-def map_dict(dict, lst):
-    return [dict[x] for x in lst]
+def map_dict(dic, lst):
+    return [dic[x] for x in lst]
 
 
 def draw_sphere_marker(position, radius=0.02, color=(0, 0, 1, 1)):
     vs_id = p.createVisualShape(p.GEOM_SPHERE, radius=radius, rgbaColor=color)
     marker_id = p.createMultiBody(basePosition=position, baseCollisionShapeIndex=-1, baseVisualShapeIndex=vs_id)
     return marker_id
+
+
+def check_convergence(errors, eps=0.001):
+    for err1, err2 in sliding(errors, 2):
+        if abs(err1 - err2) >= eps:
+            return False
+    return True

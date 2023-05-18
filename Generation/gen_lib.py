@@ -13,6 +13,7 @@ from numpy import pi
 from bidict import bidict
 import time
 
+# ASSET_ROOT = os.path.abspath('urdfc')
 ASSET_ROOT = os.path.abspath('Generation/urdfc')
 
 obj_types = ['cube', 'cylinder', 'ccuboid', 'scuboid', 'tcuboid', 'roof', 'pyramid', 'cuboid']
@@ -591,6 +592,7 @@ PLANE_ROOT = os.path.abspath('urdf')
 
 
 def simulate_scene_pc(cameras, ret_img=False, slow=False, wait=0):
+    # loader = PBObjectLoader('urdfc')
     loader = PBObjectLoader('Generation/urdfc')
 
     otypes = list(OM_MAP.keys())
@@ -809,6 +811,41 @@ def typeidx_colours(typeidx):
         [0.8728815094572616, 0.11715588167789504, 0.9012921785976408],
         [0.8708585184367256, 0.13537291463132384, 0.2942509320637464]
     ])[typeidx]
+
+
+def dependence(obj1, obj2):
+    """
+    returns {
+         0 if objects are independent
+         1 if object 1 depends on object 2
+
+    }
+    """
+    ctpts = p.getContactPoints(int(obj1), int(obj2))
+    if len(ctpts) == 0:
+        return 0
+    contact_vec_on_2 = ctpts[0][7]
+
+    return 1 if np.sign(contact_vec_on_2)[-1] == 1 else 0
+
+
+def dep_graph(node_ids):
+    """
+    returns an adjacency matrix with shape (len(node_ids),len(node_ids)) where {
+        1 == depg[i,j] means i depends on j
+        0 == depg[i,j] means i does not depend on j
+    }
+
+    note: lower/higher refers to the index in the matrix, not the object ids
+    """
+    n = len(node_ids)
+    depg = np.zeros((n, n))
+
+    for i, obj1 in enumerate(node_ids):
+        for j, obj2 in enumerate(node_ids):
+            depg[i, j] = dependence(obj1, obj2)
+
+    return depg
 
 
 if __name__ == '__main__':

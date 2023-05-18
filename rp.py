@@ -2,6 +2,8 @@ import pybullet as p
 import pybullet_data
 
 import time
+
+from matplotlib import pyplot as plt
 from toposort import toposort
 import os.path as osp
 
@@ -14,7 +16,7 @@ from Generation.gen_lib import simulate_scene_pc, Camera, PBObjectLoader
 from nn.Network import ObjectNet, DNet
 from nn.PositionalEncoder import PositionalEncoding
 from robot.robot import UR5
-from testing.tutility import print_dep
+from testing.tutility import print_dep, plot_adj_mats
 from utility import load_model, all_edges, name_tid, tid_name, map_dict, draw_sphere_marker
 
 
@@ -29,7 +31,7 @@ def setup_basic():
     pitch = -17.800016403198242
     p.resetDebugVisualizerCamera(dist, yaw, pitch, target)
 
-    plane_id = p.loadURDF("plane.urdf")
+    plane_id = p.loadURDF('plane.urdf')
 
     return physics_client, plane_id
 
@@ -182,6 +184,7 @@ def get_suc_point(pcds, oids, oid, epsilon=0.00001):
 
 def main():
     seed = 1369 or np.random.randint(0, 10000)
+    # seed = 500 or np.random.randint(0, 10000)  # 4978
     print(f'SEED: {seed}')
     np.random.seed(seed)
 
@@ -204,6 +207,11 @@ def main():
     node_graph = initial_graph(pcds, oids, feat_model=feat_net)
     gt_graph = dep_graph(goal_state.obj_ids)
     pred_graph = scene_graph(node_graph, dep_model=dep_net)
+
+    plot_adj_mats(gt_graph, pred_graph, titles=['Ground Truth', 'Prediction'])
+    plt.show()
+
+    # if (gt_graph != pred_graph).any():
     assert (gt_graph == pred_graph).all()
 
     # set up workspace for rearrangement
@@ -217,32 +225,56 @@ def main():
     for _ in range(100):
         p.stepSimulation()
 
-    # do planning and rearrangement
+    # planning
     graph_dict = dep_dict(pred_graph)
     topo_layers = toposort(graph_dict)
+    robot.move_timestep = 1/240
 
-    above_field = [-0.25, 0, 0.2]
-    above_scene = [0, 0, 0.2]
-
-    # TESTING
+    # rearrangement
     for layer in topo_layers:
         for obj_idx in layer:
             c_oid = curr_state.obj_ids[obj_idx]
             g_oid = goal_state.obj_ids[obj_idx]
 
-            # cpos, corn = p.getBasePositionAndOrientation(coid)
-            g_pos, g_orn = get_target_pose(goal_state, g_oid)
-            c_pos = get_suc_point(c_pcds, c_oids, c_oid)-[0, 0, 0.001] #FIRST MOVE DIRECTLY ABOVE OBJECT
+            if c_oid == 1:
+                # robot.move_timestep = 1/60
+                print(1)
 
-            robot.move_ee(c_pos, orn=(0, 0, 0, 1))
+            # in real, position obtained from point-cloud and orientation from TEASER++
+            c_pos_cen, c_orn = p.getBasePositionAndOrientation(c_oid)
+            g_pos_cen, g_orn = get_target_pose(goal_state, g_oid)
+            c_pos = np.array(c_pos_cen)  # get_suc_point(c_pcds, c_oids, c_oid)
+            g_pos_cen = np.array(g_pos_cen)
+
+            # obtain goal orientation
+            g_orn_to = p.getDifferenceQuaternion(c_orn, g_orn)  # in real, done with TEASER++
+
+            # move above cur position, move to curr, pick, move above curr
+            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1))
+            c_pos_from, _ = robot.move_ee_down(c_pos, orn=(0, 0, 0, 1))
             robot.suction(True)
-            robot.move_ee(above_field)
+            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1))
 
-            robot.move_ee(g_pos, orn=(0, 0, 0, 1)) #MOVE DIRECTLY ABOVE WHERE TO PLACE
+            # obtain goal position
+            succ_offt = np.subtract(c_pos_from, c_pos_cen)
+            g_pos_to = g_pos_cen+succ_offt
+
+            # g_orn_to = (0, 0, 0, 1)
+            # move above goal position, move to goal, drop, move above goal
+            robot.move_ee_above(g_pos_to, orn=g_orn_to)
+            robot.move_ee(g_pos_to+[0, 0, 0.0], orn=g_orn_to)
+            for _ in range(1000):
+                p.stepSimulation()
             robot.suction(False)
-            robot.move_ee(above_scene)
+            # TODO investigate positions in curr (after placement) and goal state [cylinder]
+            p.resetBasePositionAndOrientation(c_oid, g_pos_cen, g_orn)
+            robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
 
-    time.sleep(1000)
+    while True:
+        time.sleep(robot.move_timestep)
+        p.stepSimulation()
+
+    # TODO regen dep and pcd with (pos, orn) information
 
 
 if __name__ == '__main__':
