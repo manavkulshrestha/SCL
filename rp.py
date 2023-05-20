@@ -10,6 +10,7 @@ import os.path as osp
 import torch
 from torch_geometric.data import Data
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 from Datasets.dutility import PDPATH, DDPATH, get_depdataloaders
 from Generation.gen_lib import simulate_scene_pc, Camera, PBObjectLoader
@@ -56,7 +57,7 @@ def setup_field(loader_target, slow=False):
             pos, orn = loader_target.obj_poses[oid]
 
             c_oid = loader2.load_obj(otype=typ, pos=(xpos, ypos, 0.01), quat=orn, wait=100, slow=slow)
-            p.changeDynamics(c_oid, -1, mass=0.1)
+            p.changeDynamics(c_oid, -1, mass=0.05)
             idx += 1
 
     return loader2
@@ -185,7 +186,8 @@ def get_suc_point(pcds, oids, oid, epsilon=0.00001):
 
 def main():
     # seed = 1369 or np.random.randint(0, 10000)
-    seed = 500 or np.random.randint(0, 10000)  # 4978
+    # seed = 500 or np.random.randint(0, 10000)  # 4978
+    seed = 9457 or np.random.randint(0, 10000)  # 4978
     print(f'SEED: {seed}')
     np.random.seed(seed)
 
@@ -232,6 +234,7 @@ def main():
     robot.move_timestep = 1/240
 
     # rearrangement
+    # TODO check why cylinder is not, confirm orn stuff, build metric suite, run test set for metric
     for layer in topo_layers:
         for obj_idx in layer:
             c_oid = curr_state.obj_ids[obj_idx]
@@ -256,17 +259,20 @@ def main():
             robot.suction(True)
             robot.move_ee_above(c_pos, orn=(0, 0, 0, 1))
 
-            # obtain goal position
+            # obtain goal pose
             succ_offt = np.subtract(c_pos_from, c_pos_cen)
-            g_pos_to = g_pos_cen+succ_offt
+            g_orn_mat = R.from_quat(g_orn_to).as_matrix()
+            g_pos_to = g_pos_cen+(g_orn_mat@succ_offt)
 
             # g_orn_to = (0, 0, 0, 1)
             # move above goal position, move to goal, drop, move above goal
             robot.move_ee_above(g_pos_to, orn=g_orn_to)
-            robot.move_ee(g_pos_to+[0, 0, 0.0], orn=g_orn_to)
-            for _ in range(1000):
-                p.stepSimulation()
+            robot.move_ee(g_pos_to+[0, 0, 0.005], orn=g_orn_to)
             robot.suction(False)
+
+            for _ in range(500):
+                p.stepSimulation()
+
             robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
 
     while True:
