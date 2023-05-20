@@ -55,7 +55,8 @@ def setup_field(loader_target, slow=False):
             typ = loader_target.oid_typ_map[oid]
             pos, orn = loader_target.obj_poses[oid]
 
-            loader2.load_obj(otype=typ, pos=(xpos, ypos, 0.01), quat=orn, wait=100, slow=slow)
+            c_oid = loader2.load_obj(otype=typ, pos=(xpos, ypos, 0.01), quat=orn, wait=100, slow=slow)
+            p.changeDynamics(c_oid, -1, mass=0.1)
             idx += 1
 
     return loader2
@@ -183,8 +184,8 @@ def get_suc_point(pcds, oids, oid, epsilon=0.00001):
 
 
 def main():
-    seed = 1369 or np.random.randint(0, 10000)
-    # seed = 500 or np.random.randint(0, 10000)  # 4978
+    # seed = 1369 or np.random.randint(0, 10000)
+    seed = 500 or np.random.randint(0, 10000)  # 4978
     print(f'SEED: {seed}')
     np.random.seed(seed)
 
@@ -266,8 +267,6 @@ def main():
             for _ in range(1000):
                 p.stepSimulation()
             robot.suction(False)
-            # TODO investigate positions in curr (after placement) and goal state [cylinder]
-            p.resetBasePositionAndOrientation(c_oid, g_pos_cen, g_orn)
             robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
 
     while True:

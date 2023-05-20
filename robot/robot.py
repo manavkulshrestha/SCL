@@ -43,12 +43,12 @@ class UR5:
         i = 0
         while True:
             q_tar = np.array(p.calculateInverseKinematics(self.id, self.ee_id, pos, targetOrientation=orn))
-            q_cur = np.array([q_state[0] for q_state in p.getJointStates(self.id, self.joints)])
+            q_cur = np.array([q_state[0] for q_state in p .getJointStates(self.id, self.joints)])
             err = np.linalg.norm(q_tar - q_cur)
 
             errors.append(err)
             if break_cond() or err < error_thresh or (i > max_iter and check_convergence(errors[-5:], eps=conv_eps)):
-                print(err)
+                print(err, 'break_cond:', break_cond())
                 break
 
             p.setJointMotorControlArray(bodyUniqueId=self.id,
@@ -58,7 +58,6 @@ class UR5:
 
             p.stepSimulation()
             time.sleep(self.move_timestep)
-            # print(i)
             i += 1
 
         return q_tar, q_cur
@@ -68,16 +67,15 @@ class UR5:
         moves down from `pos` to z=0 until it detects object
         returns: pose=(pos, orn) at which it detected contact"""
         pos = [*pos[:2], 0]
+        # ee_tip dynamics = (0.0, 0.5, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.7071067811882787, -0.7071067811848163, 7.31230107716731e-14, -7.312301077203115e-14), 0.0, 0.0, 0.0, -1.0, -1.0, 2, 0.001)
+        # my ee tip dynamics = (0.0, 0.5, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.7071067811882787, -0.7071067811848163, 7.31230107716731e-14, -7.312301077203115e-14), 0.0, 0.0, 0.0, -1.0, -1.0, 2, 0.001)
 
         self.move_ee(pos, orn=orn, break_cond=lambda: self.ee.detect_contact())
         return self.ee_pose
 
-    def move_ee_above(self, pos, orn=(0, 0, 0, 1), error_thresh=0.08, max_iter=100, conv_eps=0.001,
-                      above_offt=(0, 0, 0.2), wait=1000):
+    def move_ee_above(self, pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.2)):
         a_pos = np.add(pos, above_offt)
-        self.move_ee(a_pos, orn=(0, 0, 0, 1), error_thresh=0.01, max_iter=100, conv_eps=0.0001)
-        for _ in range(wait):
-            p.stepSimulation()
+        self.move_ee(a_pos, orn=orn)
 
     def suction(self, on):
         if on:

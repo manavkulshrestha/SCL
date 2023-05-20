@@ -94,7 +94,7 @@ class Suction(Gripper):
             jointAxis=(0, 0, 0),
             parentFramePosition=(0, 0, 0),
             childFramePosition=(0, 0, -0.08))
-        p.changeConstraint(constraint_id, maxForce=800)
+        # p.changeConstraint(constraint_id, maxForce=10000)
         # p.changeConstraint(constraint_id, maxForce=50)
 
         # Reference to object IDs in environment for simulating suction.
