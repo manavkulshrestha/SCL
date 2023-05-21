@@ -1,3 +1,5 @@
+from typing import Union
+
 import numpy as np
 from scipy.sparse import coo_matrix
 from os import path as osp
@@ -170,3 +172,35 @@ def check_convergence(errors, eps=0.001):
         if abs(err1 - err2) >= eps:
             return False
     return True
+
+
+def norm(it):
+    return np.linalg.norm(it)
+
+
+def dist_e(a, b):
+    a = np.array(a)
+    b = np.array(b)
+
+    return norm(a-b)
+
+
+def dist_q(a, b):
+    a = np.array(a)
+    b = np.array(b)
+
+    return min(norm(a-b), norm(a+b))
+
+def quat_angle(a: Union[list, tuple], b:  Union[list, tuple]) -> float:
+    a = np.array(a)
+    b = np.array(b)
+
+    return 2*np.arccos(a@b)
+
+
+def jaccard(a: set, b: set) -> float:
+    return len(a & b)/len(a | b)
+
+
+def mean(lst: Union[tuple, list], axis: int = 0) -> float:
+    return np.array(lst).mean(axis=axis)

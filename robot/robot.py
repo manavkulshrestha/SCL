@@ -49,7 +49,7 @@ class UR5:
             # print(err)
             errors.append(err)
             if break_cond() or err < error_thresh or (i > max_iter and check_convergence(errors[-10:])):
-                print(f'final error: {err}, bc={break_cond()}')
+                # print(f'final error: {err}, bc={break_cond()}')
                 break
 
             p.setJointMotorControlArray(bodyUniqueId=self.id,

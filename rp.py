@@ -1,11 +1,12 @@
 import pybullet as p
 import pybullet_data
 
+import os.path as osp
 import time
+from itertools import zip_longest
 
 from matplotlib import pyplot as plt
 from toposort import toposort
-import os.path as osp
 
 import torch
 from torch_geometric.data import Data
@@ -18,7 +19,8 @@ from nn.Network import ObjectNet, DNet
 from nn.PositionalEncoder import PositionalEncoding
 from robot.robot import UR5
 from testing.tutility import print_dep, plot_adj_mats
-from utility import load_model, all_edges, name_tid, tid_name, map_dict, draw_sphere_marker
+from utility import load_model, all_edges, name_tid, tid_name, map_dict, draw_sphere_marker, dist_q, dist_e, jaccard, \
+    mean, quat_angle
 
 
 def setup_basic():
@@ -35,6 +37,14 @@ def setup_basic():
     plane_id = p.loadURDF('plane.urdf')
 
     return physics_client, plane_id
+
+
+def xy_rotmat(theta):
+    return np.array([
+        [np.cos(theta), -np.sin(theta), 0],
+        [np.sin(theta), np.cos(theta), 0],
+        [0, 0, 1]
+    ])
 
 
 def setup_field(loader_target, slow=False):
@@ -56,7 +66,11 @@ def setup_field(loader_target, slow=False):
             typ = loader_target.oid_typ_map[oid]
             pos, orn = loader_target.obj_poses[oid]
 
-            c_oid = loader2.load_obj(otype=typ, pos=(xpos, ypos, 0.01), quat=orn, wait=100, slow=slow)
+            # modify orn on xy plane
+            rot = R.from_rotvec([0, 0, np.random.uniform(0, 2*np.pi)])
+            new_orn = (rot * R.from_quat(orn)).as_quat()
+
+            c_oid = loader2.load_obj(otype=typ, pos=(xpos, ypos, 0.01), quat=new_orn, wait=100, slow=slow)
             p.changeDynamics(c_oid, -1, mass=0.05)
             idx += 1
 
@@ -187,7 +201,8 @@ def get_suc_point(pcds, oids, oid, epsilon=0.00001):
 def main():
     # seed = 1369 or np.random.randint(0, 10000)
     # seed = 500 or np.random.randint(0, 10000)  # 4978
-    seed = 9457 or np.random.randint(0, 10000)  # 4978
+    # seed = 9457 or np.random.randint(0, 10000)  # 4978
+    seed = 8634 or np.random.randint(0, 10000)  # 4978
     print(f'SEED: {seed}')
     np.random.seed(seed)
 
@@ -208,8 +223,17 @@ def main():
 
     # infer scene structure
     node_graph = initial_graph(pcds, oids, feat_model=feat_net)
+    start = time.time()
+    pred_graph = scene_graph(node_graph, dep_model=dep_net)  # TODO add adaptation to reduce threshold
+    planning_time = time.time() - start
+    pred_layers = toposort(dep_dict(pred_graph))
+    withsorting_time = time.time() - start
     gt_graph = dep_graph(goal_state.obj_ids)
-    pred_graph = scene_graph(node_graph, dep_model=dep_net)
+
+    # get jaccard similarity of layers
+    gt_layers = toposort(dep_dict(gt_graph))
+    jacc = [jaccard(gt_l, pr_l) for gt_l, pr_l in zip_longest(gt_layers, pred_layers, fillvalue=set())]
+    javg = mean(jacc)
 
     plot_adj_mats(gt_graph, pred_graph, titles=['Ground Truth', 'Prediction'])
     plt.show()
@@ -232,11 +256,13 @@ def main():
     graph_dict = dep_dict(pred_graph)
     topo_layers = toposort(graph_dict)
     robot.move_timestep = 1/240
+    robot.move_timestep = 0
 
     # rearrangement
-    # TODO check why cylinder is not, confirm orn stuff, build metric suite, run test set for metric
+    moved_idx = []
     for layer in topo_layers:
         for obj_idx in layer:
+            moved_idx.append(obj_idx)
             c_oid = curr_state.obj_ids[obj_idx]
             g_oid = goal_state.obj_ids[obj_idx]
 
@@ -275,11 +301,35 @@ def main():
 
             robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
 
+    # metric collection
+    pos_err, orn_err, ora_err = [], [], []
+    for obj_idx in moved_idx:
+        g_oid = goal_state.obj_ids[obj_idx]
+        c_oid = curr_state.obj_ids[obj_idx]
+
+        g_pos, g_orn = goal_state.obj_poses[g_oid]
+        c_pos, c_orn = p.getBasePositionAndOrientation(c_oid)
+
+        pos_err.append(dist_e(c_pos, g_pos))
+        orn_err.append(dist_q(c_orn, g_orn))
+        ora_err.append(quat_angle(c_orn, g_orn))
+
+    # report metrics
+    pos_err = np.array(pos_err)
+    orn_err = np.array(orn_err)
+    print(pos_err)
+    print(orn_err)
+    orn_err /= np.sqrt(2)
+
+    print(f'pos error: {np.mean(pos_err):.4f}+/-{np.std(pos_err):.4f}, max: {np.max(pos_err):.4f}, min: {np.min(pos_err):.4f}')
+    print(f'orn error: {np.mean(orn_err):.4f}+/-{np.std(orn_err):.4f}, max: {np.max(orn_err):.4f}, min: {np.min(orn_err):.4f}')
+    print(f'ora error: {np.mean(ora_err):.4f}+/-{np.std(ora_err):.4f}, max: {np.max(ora_err):.4f}, min: {np.min(ora_err):.4f}')
+    print(f'averaged jaccard similarity of inferred layers: {javg}')
+    print(f'planning time: {planning_time:.6f} (dependence graph) and {withsorting_time:.6f} (with sorting)')
+
     while True:
         time.sleep(robot.move_timestep)
         p.stepSimulation()
-
-    # TODO regen dep and pcd with (pos, orn) information
 
 
 if __name__ == '__main__':
