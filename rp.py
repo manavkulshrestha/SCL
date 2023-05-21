@@ -93,7 +93,7 @@ def get_obj_feats(obj_pcd, sample_count=512, *, feat_model, pos_enc):
 
     # get total features from positional encoding of centroid and object level features from network
     cen_ten = torch.tensor(obj_cen, dtype=torch.float).cuda()
-    pred_tid, obj_emb = feat_model.embesuited(obj_pcd, get_pred=True)
+    pred_tid, obj_emb = feat_model.embed(obj_pcd, get_pred=True)
 
     obj_emb = torch.squeeze(obj_emb)
     pos_emb = pos_enc(cen_ten)
@@ -202,7 +202,8 @@ def main():
     # seed = 1369 or np.random.randint(0, 10000)
     # seed = 500 or np.random.randint(0, 10000)  # 4978
     # seed = 9457 or np.random.randint(0, 10000)  # 4978
-    seed = 8634 or np.random.randint(0, 10000)  # 4978
+    # seed = 8634 or np.random.randint(0, 10000)  # 4978
+    seed = 3097 or np.random.randint(0, 10000)  # 4276 # weird behavior = 3097, falls but error = 8174
     print(f'SEED: {seed}')
     np.random.seed(seed)
 

@@ -111,7 +111,7 @@ def planning(node_graph, dep_net, dep_g):
     }
 
 
-def rearrangement(robot, pred_layers, curr_state, poss, orns, timeout=20):
+def rearrangement(robot, pred_layers, curr_state, poss, orns, timeout=20000):
     start_time = time.time()
 
     moved_idx = []
@@ -202,22 +202,22 @@ def main():
     dep_net.eval()
 
     # load data and do experiments
-    # _, _, test_loader = get_alldataloaders(feat_net)
-    # for i, data in enumerate(test_loader):
-    #     robot, initial_state, g_oids = setup_env(data.o_ids[0], data.t_ids[0], data.node_ids[0],
-    #                                              data.g_poss[0], data.g_orns[0])
-    #     robot.move_timestep = 0
-    #     pred_layers, p_metrics = planning(data, dep_net, data.adj_mat[0])
-    #     timeout, moved_idx, r_metrics = rearrangement(robot, pred_layers, initial_state, data.g_poss[0], data.g_orns[0])
-    #     p.disconnect()
-    #
-    #     print('success:', not timeout)
-    #     # TODO log {'moved_idx': moved_idx, **p_metrics, **r_metrics, 'num_nodes': len(data.dep_g)}
-    #
-    # # TODO completion, logging in file, analysis/readout script
+    _, _, test_loader = get_alldataloaders(feat_net)
+    for i, data in enumerate(test_loader):
+        robot, initial_state, g_oids = setup_env(data.o_ids[0], data.t_ids[0], data.node_ids[0],
+                                                 data.g_poss[0], data.g_orns[0])
+        robot.move_timestep = 0
+        pred_layers, p_metrics = planning(data, dep_net, data.adj_mat[0])
+        timeout, moved_idx, r_metrics = rearrangement(robot, pred_layers, initial_state, data.g_poss[0], data.g_orns[0])
+        p.disconnect()
 
-    recreate_scene(9000)
-    time.sleep(100)
+        print('success:', not timeout)
+        # TODO log {'moved_idx': moved_idx, **p_metrics, **r_metrics, 'num_nodes': len(data.dep_g)}
+
+    # TODO completion, logging in file, analysis/readout script
+
+    # recreate_scene(9000)
+    # time.sleep(100)
 
 
 if __name__ == '__main__':
