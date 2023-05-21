@@ -13,15 +13,15 @@ from torch_geometric.data import Data
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
-from Datasets.dutility import get_alldataloaders
+from Datasets.dutility import get_alldataloaders, ADPATH
 from Generation.gen_lib import simulate_scene_pc, Camera, PBObjectLoader
 from nn.Network import ObjectNet, DNet
 from robot.robot import UR5
 from rp import setup_basic, dep_dict, scene_graph, dep_graph, remove_objects
-from utility import load_model, dist_q, dist_e, jaccard, mean, quat_angle, tid_name
+from utility import load_model, dist_q, dist_e, jaccard, mean, quat_angle, tid_name, visualize, make_pcd, tid_colors
 
 
-def setup_field_fromdata(node_ids, o_ids, t_ids, poss, orns):
+def setup_field_fromdata(node_ids, o_ids, t_ids, poss, orns, slow=False):
     """ takes the goal poss and orns and lays out the involved objects in a grid on the plane """
     x_range = [-0.2, -0.5]
     y_range = [-.2, .2]
@@ -93,13 +93,14 @@ def planning(node_graph, dep_net, dep_g):
     start = time.time()
     pred_graph = scene_graph(node_graph, dep_model=dep_net)  # TODO add adaptation to reduce threshold
     inference_time = time.time() - start
-    pred_layers = toposort(dep_dict(pred_graph))
+    pred_layers = list(toposort(dep_dict(pred_graph)))
     planning_time = time.time() - start
     gt_graph = dep_g
 
-    # get jaccard similarity of layers
-    gt_layers = toposort(dep_dict(gt_graph))
-    layer_jaccards = [jaccard(gt_l, pr_l) for gt_l, pr_l in zip_longest(gt_layers, pred_layers, fillvalue=set())]
+    # get jaccard similarity of layers # list(toposort(dep_dict(gt_graph)))
+    gt_layers = list(toposort(dep_dict(gt_graph)))
+    layer_jaccards = [jaccard(gt_l, pr_l) for gt_l, pr_l in zip_longest(list(gt_layers), list(pred_layers),
+                                                                        fillvalue=set())]
     mean_jaccard = mean(layer_jaccards)
 
     return pred_layers, {
@@ -110,7 +111,7 @@ def planning(node_graph, dep_net, dep_g):
     }
 
 
-def rearrangement(robot, pred_layers, curr_state, poss, orns, timeout=10):
+def rearrangement(robot, pred_layers, curr_state, poss, orns, timeout=20):
     start_time = time.time()
 
     moved_idx = []
@@ -155,7 +156,7 @@ def rearrangement(robot, pred_layers, curr_state, poss, orns, timeout=10):
     return True, moved_idx, rearrangement_metrics(moved_idx, curr_state, poss, orns)
 
 
-def setup_env(i, o_ids, t_ids, node_ids, poss, orns, headless=False):
+def setup_env(o_ids, t_ids, node_ids, poss, orns, headless=False):
     # add plane and camera and stuff
     setup_basic(headless=headless)
 
@@ -168,6 +169,29 @@ def setup_env(i, o_ids, t_ids, node_ids, poss, orns, headless=False):
     return robot, curr_state, g_oids
 
 
+def recreate_scene(scene_num):
+    scene_name = f'{scene_num // 1000}_{scene_num % 1000}.npz'
+    all_path = osp.join(ADPATH, scene_name)
+
+    all_file = np.load(all_path)
+    to_extract = ['pc', 'oid', 'tid', 'depg', 'pos', 'orn', 'node_ids']
+    pcds, o_ids, t_ids, dep_g, g_poss, g_orns, node_ids = [all_file[x] for x in to_extract]
+
+    setup_basic()
+    loader = PBObjectLoader('Generation/urdfc')
+    oid_tid = dict(zip(o_ids, t_ids.astype(int)))
+
+    visualize(make_pcd(pcds, tid_colors(t_ids)))
+
+    for g_oid, g_pos, g_orn in zip(np.unique(o_ids).astype(int), g_poss, g_orns):
+        tid = oid_tid[g_oid]
+        typ = tid_name(tid)
+        loader.load_obj(typ, g_pos, g_orn)
+
+
+    return loader
+
+
 def main():
     # load models
     feat_net = load_model(ObjectNet, 'cn_test_best_model.pt')
@@ -178,15 +202,22 @@ def main():
     dep_net.eval()
 
     # load data and do experiments
-    _, _, test_loader = get_alldataloaders(feat_net)
-    for i, data in enumerate(test_loader):
-        robot, initial_state, g_oids = setup_env(i, data.o_ids, data.t_ids, data.node_ids, data.g_poss, data.g_orns)
-        pred_layers, p_metrics = planning(data, dep_net, data.dep_g)
-        timeout, moved_idx, r_metrics = rearrangement(robot, pred_layers, initial_state, data.g_poss, data.g_orns)
+    # _, _, test_loader = get_alldataloaders(feat_net)
+    # for i, data in enumerate(test_loader):
+    #     robot, initial_state, g_oids = setup_env(data.o_ids[0], data.t_ids[0], data.node_ids[0],
+    #                                              data.g_poss[0], data.g_orns[0])
+    #     robot.move_timestep = 0
+    #     pred_layers, p_metrics = planning(data, dep_net, data.adj_mat[0])
+    #     timeout, moved_idx, r_metrics = rearrangement(robot, pred_layers, initial_state, data.g_poss[0], data.g_orns[0])
+    #     p.disconnect()
+    #
+    #     print('success:', not timeout)
+    #     # TODO log {'moved_idx': moved_idx, **p_metrics, **r_metrics, 'num_nodes': len(data.dep_g)}
+    #
+    # # TODO completion, logging in file, analysis/readout script
 
-        # TODO log {'moved_idx': moved_idx, **p_metrics, **r_metrics}
-
-    # TODO completion, logging in file, analysis/readout script
+    recreate_scene(9000)
+    time.sleep(100)
 
 
 if __name__ == '__main__':

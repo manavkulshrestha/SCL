@@ -114,6 +114,10 @@ class DependenceDataset(InMemoryDataset):
             for oid in node_ids:
                 obj_pcd = pcds[o_ids == oid]
                 obj_cen = obj_pcd.mean(axis=0)
+
+                # if file_name == '9_226.npz':
+                #     print(1)
+
                 tid = oid_tid_map[oid]
 
                 if self.sample_count is not None:
@@ -188,7 +192,12 @@ class AllDataset(InMemoryDataset):
             for oid in node_ids:
                 obj_pcd = pcds[o_ids == oid]
                 obj_cen = obj_pcd.mean(axis=0)
-                tid = oid_tid_map[oid]
+
+                try:
+                    tid = oid_tid_map[oid]
+                except KeyError as e:
+                    print(f'rolled object error in {file_name}: {e}')
+                    break
 
                 if self.sample_count is not None:
                     idx = np.random.choice(len(obj_pcd), self.sample_count, replace=len(obj_pcd) < self.sample_count)
@@ -202,19 +211,20 @@ class AllDataset(InMemoryDataset):
                 pos_emb = self.pos_enc(cen_ten)
                 x = torch.cat([pos_emb, obj_emb])
                 nodes_feats.append(x)
-            nodes_feats = torch.stack(nodes_feats)
+            else:
+                nodes_feats = torch.stack(nodes_feats)
 
-            # depg[i][j] == 1 --> i depends on j. edge labels are all ones. edges are of form (row, col)
-            adj = coo_matrix(dep_g)
-            gt_e_idx = torch.tensor(np.vstack([adj.row, adj.col]), dtype=torch.long)
-            all_e_idx = all_edges(len(node_ids))
-            all_e_y = torch.tensor(dep_g[tuple(all_e_idx)]).view(-1)
+                # depg[i][j] == 1 --> i depends on j. edge labels are all ones. edges are of form (row, col)
+                adj = coo_matrix(dep_g)
+                gt_e_idx = torch.tensor(np.vstack([adj.row, adj.col]), dtype=torch.long)
+                all_e_idx = all_edges(len(node_ids))
+                all_e_y = torch.tensor(dep_g[tuple(all_e_idx)]).view(-1)
 
-            # x is nodes' features, gt_e_idx is ground truth links', all_e_y are labels for all_e_idx
-            data = GraphData(x=nodes_feats.cpu(), gt_e_idx=gt_e_idx, all_e_idx=all_e_idx, all_e_y=all_e_y,
-                             node_ids=node_ids, num_nodes=len(node_ids), adj_mat=dep_g,
-                             g_poss=pos, g_orns=orn, o_ids=o_ids, t_ids=t_ids)
-            data_list.append(data)
+                # x is nodes' features, gt_e_idx is ground truth links', all_e_y are labels for all_e_idx
+                data = GraphData(x=nodes_feats.cpu(), gt_e_idx=gt_e_idx, all_e_idx=all_e_idx, all_e_y=all_e_y,
+                                 node_ids=node_ids, num_nodes=len(node_ids), adj_mat=dep_g,
+                                 g_poss=pos, g_orns=orn, o_ids=o_ids, t_ids=t_ids)
+                data_list.append(data)
 
         return data_list
 

@@ -1,4 +1,4 @@
-from Datasets.Dataset import DependenceDataset, ObjectDataset
+from Datasets.Dataset import DependenceDataset, ObjectDataset, AllDataset
 from utility import RP_ROOT
 import os.path as osp
 from torch_geometric.loader import DataLoader
@@ -25,7 +25,7 @@ def get_depdataloaders(feat_net, chunks=((0, 8000), (8000, 9000), (9000, 10000))
     val_loader = DataLoader(val_dataset, batch_size=batch_sizes[1], shuffle=shuffles[1])  # num workers causes error
     test_loader = DataLoader(test_dataset, batch_size=batch_sizes[2], shuffle=shuffles[2])  # num workers causes error
 
-    return train_loader, val_loader, test_loader
+    return None, None, test_loader
 
 
 def get_objdataloaders():
@@ -56,12 +56,12 @@ def get_alldataloaders(feat_net, chunks=((0, 8000), (8000, 9000), (9000, 10000))
     ])
 
     sc = 512
-    train_dataset = DependenceDataset(PDPATH, ADPATH, feat_net=feat_net, chunk=chunks[0], transform=transform, sample_count=sc)
-    val_dataset = DependenceDataset(PDPATH, ADPATH, feat_net=feat_net, chunk=chunks[1], transform=transform, sample_count=sc)
-    test_dataset = DependenceDataset(PDPATH, ADPATH, feat_net=feat_net, chunk=chunks[2], transform=transform, sample_count=sc)
+    # train_dataset = AllDataset(ADPATH, feat_net=feat_net, chunk=chunks[0], transform=transform, sample_count=sc)
+    # val_dataset = AllDataset(ADPATH, feat_net=feat_net, chunk=chunks[1], transform=transform, sample_count=sc)
+    test_dataset = AllDataset(ADPATH, feat_net=feat_net, chunk=chunks[2], transform=transform, sample_count=sc)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_sizes[0], shuffle=shuffles[0])  # num workers causes error
-    val_loader = DataLoader(val_dataset, batch_size=batch_sizes[1], shuffle=shuffles[1])  # num workers causes error
+    # train_loader = DataLoader(train_dataset, batch_size=batch_sizes[0], shuffle=shuffles[0])  # num workers causes error
+    # val_loader = DataLoader(val_dataset, batch_size=batch_sizes[1], shuffle=shuffles[1])  # num workers causes error
     test_loader = DataLoader(test_dataset, batch_size=batch_sizes[2], shuffle=shuffles[2])  # num workers causes error
 
-    return train_loader, val_loader, test_loader
+    return None, None, test_loader
