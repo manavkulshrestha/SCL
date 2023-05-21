@@ -12,7 +12,6 @@ device = torch.device('cuda')
 RP_ROOT = osp.abspath('/home/mk/rp/')
 MODELS_PATH = osp.join(RP_ROOT, 'models/')
 
-
 def sliding(lst, n):
     """ returns a sliding window of size n over a list lst """
     for window in zip(*[lst[i:] for i in range(n)]):
@@ -190,6 +189,7 @@ def dist_q(a, b):
     b = np.array(b)
 
     return min(norm(a-b), norm(a+b))
+
 
 def quat_angle(a: Union[list, tuple], b:  Union[list, tuple]) -> float:
     a = np.array(a)

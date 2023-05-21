@@ -23,9 +23,9 @@ from utility import load_model, all_edges, name_tid, tid_name, map_dict, draw_sp
     mean, quat_angle
 
 
-def setup_basic():
+def setup_basic(headless=False):
     """ sets up the camera, adds gravity, and adds the plane """
-    physics_client = p.connect(p.GUI)
+    physics_client = p.connect(p.DIRECT if headless else p.GUI)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     p.setGravity(0, 0, -9.81)
     target = (-0.07796166092157364, 0.005451506469398737, -0.06238798052072525)
@@ -93,7 +93,7 @@ def get_obj_feats(obj_pcd, sample_count=512, *, feat_model, pos_enc):
 
     # get total features from positional encoding of centroid and object level features from network
     cen_ten = torch.tensor(obj_cen, dtype=torch.float).cuda()
-    pred_tid, obj_emb = feat_model.embed(obj_pcd, get_pred=True)
+    pred_tid, obj_emb = feat_model.embesuited(obj_pcd, get_pred=True)
 
     obj_emb = torch.squeeze(obj_emb)
     pos_emb = pos_enc(cen_ten)
@@ -330,6 +330,8 @@ def main():
     while True:
         time.sleep(robot.move_timestep)
         p.stepSimulation()
+
+    # TODO move to test loader, success and completion, logging in file, analysis/readout script
 
 
 if __name__ == '__main__':
