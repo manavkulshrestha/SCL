@@ -42,12 +42,17 @@ class UR5:
         i = 0
 
         while True:
-            q_tar = np.array(p.calculateInverseKinematics(self.id, self.ee_id, pos, targetOrientation=orn))
+            q_tar = np.array(p.calculateInverseKinematics(bodyUniqueId=self.id,
+                                                          endEffectorLinkIndex=self.ee_id,
+                                                          targetPosition=pos,
+                                                          targetOrientation=orn,
+                                                          maxNumIterations=100))
             q_cur = np.array([q_state[0] for q_state in p .getJointStates(self.id, self.joints)])
             err = np.linalg.norm(q_tar - q_cur)
 
             # print(err)
             errors.append(err)
+            print(f'bc: {break_cond()}, detect_contact: {self.ee.detect_contact()}')
             if break_cond() or err < error_thresh or (i > max_iter and check_convergence(errors[-10:])):
                 # print(f'final error: {err}, bc={break_cond()}')
                 break
@@ -68,12 +73,17 @@ class UR5:
         moves down from `pos` to z=0 until it detects object
         returns: pose=(pos, orn) at which it detected contact"""
         pos = [*pos[:2], 0]
-        self.move_ee(pos, orn=orn, break_cond=lambda: self.ee.detect_contact(), **kwargs)
+        self.move_ee(pos, orn=orn, break_cond=self.ee.detect_contact, **kwargs)
         return self.ee_pose
 
     def move_ee_above(self, pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.2), **kwargs):
         a_pos = np.add(pos, above_offt)
         self.move_ee(a_pos, orn=orn, **kwargs)
+
+    def move_ee_away(self, offt):
+        ee_pos, ee_orn = self.ee_pose
+        target_pos = np.add(ee_pos, offt)
+        self.move_ee(target_pos, ee_orn)
 
     def suction(self, on):
         if on:

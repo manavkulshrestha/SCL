@@ -39,20 +39,12 @@ def setup_basic(headless=False):
     return physics_client, plane_id
 
 
-def xy_rotmat(theta):
-    return np.array([
-        [np.cos(theta), -np.sin(theta), 0],
-        [np.sin(theta), np.cos(theta), 0],
-        [0, 0, 1]
-    ])
-
-
 def setup_field(loader_target, slow=False):
     """ takes the goal state and lays out the involved objects in a grid on the plane """
     loader2 = PBObjectLoader('Generation/urdfc')
 
-    x_range = [-0.2, -0.5]
-    y_range = [-.2, .2]
+    y_range = [0.2, 0.5]
+    x_range = [.2, -.2]
 
     num_objs = len(loader_target.obj_poses)
 
@@ -247,8 +239,8 @@ def main():
     remove_objects(goal_state)
     curr_state = setup_field(goal_state)
     cam4_pos = [-0.25, 0, 0.5]
-    cam4 = Camera(cam4_pos, target=[*cam4_pos[:2], 0])
-    c_pcds, c_oids = cam4.get_point_cloud()
+    # cam4 = Camera(cam4_pos, target=[*cam4_pos[:2], 0])
+    # c_pcds, c_oids = cam4.get_point_cloud()
     robot = UR5([-0.5, 0, 0])
     for _ in range(100):
         p.stepSimulation()
@@ -256,8 +248,12 @@ def main():
     # planning
     graph_dict = dep_dict(pred_graph)
     topo_layers = toposort(graph_dict)
-    robot.move_timestep = 1/240
-    robot.move_timestep = 0
+    robot.move_timestep = 1/60
+    # robot.move_timestep = 0
+
+    # while True:
+    #     p.stepSimulation()
+    #     time.sleep(1/240)
 
     # rearrangement
     moved_idx = []
@@ -281,7 +277,8 @@ def main():
             g_orn_to = p.getDifferenceQuaternion(c_orn, g_orn)  # in real, done with TEASER++
 
             # move above cur position, move to curr, pick, move above curr
-            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1))
+            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.2))
+            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.05))
             c_pos_from, _ = robot.move_ee_down(c_pos, orn=(0, 0, 0, 1))
             robot.suction(True)
             robot.move_ee_above(c_pos, orn=(0, 0, 0, 1))
@@ -291,14 +288,17 @@ def main():
             g_orn_mat = R.from_quat(g_orn_to).as_matrix()
             g_pos_to = g_pos_cen+(g_orn_mat@succ_offt)
 
-            # g_orn_to = (0, 0, 0, 1)
             # move above goal position, move to goal, drop, move above goal
             robot.move_ee_above(g_pos_to, orn=g_orn_to)
-            robot.move_ee(g_pos_to+[0, 0, 0.005], orn=g_orn_to)
+            robot.move_ee(g_pos_to+[0, 0, 0.01], orn=g_orn_to)
             robot.suction(False)
+            robot.move_ee_away([0, 0, 0.01])
 
+            debug = False
             for _ in range(500):
                 p.stepSimulation()
+                if debug:
+                    time.sleep(robot.move_timestep)
 
             robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
 
@@ -332,7 +332,7 @@ def main():
         time.sleep(robot.move_timestep)
         p.stepSimulation()
 
-    # TODO move to test loader, success and completion, logging in file, analysis/readout script
+    # logging in file, analysis/readout script
 
 
 if __name__ == '__main__':
