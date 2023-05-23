@@ -265,8 +265,8 @@ def main():
     for i, data in enumerate(test_loader):
         if not condition(data, l_bound, u_bound):
             continue
-        if i not in [472, 490, 523, 570, 858, 939, 1045, 1048, 1134, 1138]:
-            continue
+        # if i not in [472, 490, 523, 570, 858, 1045, 1048, 1134]: # 570 setup issue
+        #     continue
         count += 1
         if count >= data_count:
             break
