@@ -221,4 +221,4 @@ class Suction(Gripper):
         suctioned_object = None
         if self.contact_constraint is not None:
             suctioned_object = p.getConstraintInfo(self.contact_constraint)[2]
-        return suctioned_object is not None
+        return suctioned_object

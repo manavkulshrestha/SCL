@@ -220,10 +220,12 @@ class AllDataset(InMemoryDataset):
                 all_e_idx = all_edges(len(node_ids))
                 all_e_y = torch.tensor(dep_g[tuple(all_e_idx)]).view(-1)
 
+                oid_tid = dict(zip(o_ids, t_ids))
+
                 # x is nodes' features, gt_e_idx is ground truth links', all_e_y are labels for all_e_idx
                 data = GraphData(x=nodes_feats.cpu(), gt_e_idx=gt_e_idx, all_e_idx=all_e_idx, all_e_y=all_e_y,
                                  node_ids=node_ids, num_nodes=len(node_ids), adj_mat=dep_g,
-                                 g_poss=pos, g_orns=orn, o_ids=o_ids, t_ids=t_ids)
+                                 g_poss=pos, g_orns=orn, oid_tid=[oid_tid])
                 data_list.append(data)
 
         return data_list

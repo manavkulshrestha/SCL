@@ -65,3 +65,21 @@ def get_alldataloaders(feat_net, chunks=((0, 8000), (8000, 9000), (9000, 10000))
     test_loader = DataLoader(test_dataset, batch_size=batch_sizes[2], shuffle=shuffles[2])  # num workers causes error
 
     return None, None, test_loader
+
+
+def get_scenesdataloader(feat_net, chunks=((0, 8000), (8000, 9000), (9000, 10000)),
+                       batch_sizes=(64, 64, 1), shuffles=(True, True, False)):
+    transform = T.Compose([
+        T.ToDevice('cuda'),
+    ])
+
+    sc = 512
+    dataset = AllDataset(ADPATH, feat_net=feat_net, chunk=(0, 10000), transform=transform, sample_count=sc)
+    # val_dataset = AllDataset(ADPATH, feat_net=feat_net, chunk=chunks[1], transform=transform, sample_count=sc)
+    # test_dataset = AllDataset(ADPATH, feat_net=feat_net, chunk=chunks[2], transform=transform, sample_count=sc)
+
+    loader = DataLoader(dataset, batch_size=1, shuffle=False)  # num workers causes error
+    # val_loader = DataLoader(val_dataset, batch_size=batch_sizes[1], shuffle=shuffles[1])  # num workers causes error
+    # test_loader = DataLoader(test_dataset, batch_size=batch_sizes[2], shuffle=shuffles[2])  # num workers causes error
+
+    return None, None, loader

@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Iterable
 
 import numpy as np
 from scipy.sparse import coo_matrix
@@ -173,7 +173,7 @@ def check_convergence(errors, eps=0.001):
     return True
 
 
-def norm(it):
+def norm(it: Union[np.ndarray, list, tuple]) -> float:
     return np.linalg.norm(it)
 
 
@@ -184,11 +184,11 @@ def dist_e(a, b):
     return norm(a-b)
 
 
-def dist_q(a, b):
+def dist_q(a, b, normalized=False):
     a = np.array(a)
     b = np.array(b)
 
-    return min(norm(a-b), norm(a+b))
+    return min(norm(a-b), norm(a+b))/(np.sqrt(2) if normalized else 1)
 
 
 def quat_angle(a: Union[list, tuple], b:  Union[list, tuple]) -> float:
@@ -202,5 +202,14 @@ def jaccard(a: set, b: set) -> float:
     return len(a & b)/len(a | b)
 
 
-def mean(lst: Union[tuple, list], axis: int = 0) -> float:
+def mean(lst: Union[Iterable], axis: int = 0) -> float:
     return np.array(lst).mean(axis=axis)
+
+
+def std(lst: Union[Iterable]) -> float:
+    return float(np.std(lst))
+
+
+def unit_vec(lst: np.ndarray) -> np.ndarray:
+    mag = norm(lst)
+    return (lst/mag) if mag > 0 else 0

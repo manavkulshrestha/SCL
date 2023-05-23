@@ -23,6 +23,9 @@ from utility import load_model, all_edges, name_tid, tid_name, map_dict, draw_sp
     mean, quat_angle
 
 
+debug = False
+
+
 def setup_basic(headless=False):
     """ sets up the camera, adds gravity, and adds the plane """
     physics_client = p.connect(p.DIRECT if headless else p.GUI)
@@ -59,11 +62,12 @@ def setup_field(loader_target, slow=False):
             pos, orn = loader_target.obj_poses[oid]
 
             # modify orn on xy plane
-            rot = R.from_rotvec([0, 0, np.random.uniform(0, 2*np.pi)])
+            rot = R.from_rotvec([0, 0, np.random.uniform(-np.pi/2, np.pi/2)])
             new_orn = (rot * R.from_quat(orn)).as_quat()
+            # new_orn = orn
 
             c_oid = loader2.load_obj(otype=typ, pos=(xpos, ypos, 0.01), quat=new_orn, wait=100, slow=slow)
-            p.changeDynamics(c_oid, -1, mass=0.05)
+            p.changeDynamics(c_oid, -1, mass=0.01)
             idx += 1
 
     return loader2
@@ -192,10 +196,15 @@ def get_suc_point(pcds, oids, oid, epsilon=0.00001):
 
 def main():
     # seed = 1369 or np.random.randint(0, 10000)
-    # seed = 500 or np.random.randint(0, 10000)  # 4978
-    # seed = 9457 or np.random.randint(0, 10000)  # 4978
-    # seed = 8634 or np.random.randint(0, 10000)  # 4978
-    seed = 3097 or np.random.randint(0, 10000)  # 4276 # weird behavior = 3097, falls but error = 8174
+    # seed = 500 or np.random.randint(0, 10000)
+    # seed = 9457 or np.random.randint(0, 10000)
+    # seed = 8634 or np.random.randint(0, 10000)
+    # seed = 3097 or np.random.randint(0, 10000)
+    # seed = 4276 or np.random.randint(0, 10000)
+    # seed = 8174 or np.random.randint(0, 10000)
+    # seed = 4978 or np.random.randint(0, 10000) # pred error, but recovers
+
+    seed = 4978
     print(f'SEED: {seed}')
     np.random.seed(seed)
 
@@ -228,11 +237,11 @@ def main():
     jacc = [jaccard(gt_l, pr_l) for gt_l, pr_l in zip_longest(gt_layers, pred_layers, fillvalue=set())]
     javg = mean(jacc)
 
-    plot_adj_mats(gt_graph, pred_graph, titles=['Ground Truth', 'Prediction'])
-    plt.show()
+    # plot_adj_mats(gt_graph, pred_graph, titles=['Ground Truth', 'Prediction'])
+    # plt.show()
 
     # if (gt_graph != pred_graph).any():
-    assert (gt_graph == pred_graph).all()
+    # assert (gt_graph == pred_graph).all()
 
     # set up workspace for rearrangement
     time.sleep(1)
@@ -248,8 +257,8 @@ def main():
     # planning
     graph_dict = dep_dict(pred_graph)
     topo_layers = toposort(graph_dict)
-    robot.move_timestep = 1/60
-    # robot.move_timestep = 0
+    robot.move_timestep = 1/240
+    robot.move_timestep = 0
 
     # while True:
     #     p.stepSimulation()
@@ -257,7 +266,7 @@ def main():
 
     # rearrangement
     moved_idx = []
-    for layer in topo_layers:
+    for l_num, layer in enumerate(topo_layers):
         for obj_idx in layer:
             moved_idx.append(obj_idx)
             c_oid = curr_state.obj_ids[obj_idx]
@@ -286,21 +295,30 @@ def main():
             # obtain goal pose
             succ_offt = np.subtract(c_pos_from, c_pos_cen)
             g_orn_mat = R.from_quat(g_orn_to).as_matrix()
-            g_pos_to = g_pos_cen+(g_orn_mat@succ_offt)
+            rotated_succ_offt = g_orn_mat@succ_offt
+            g_pos_to = g_pos_cen+rotated_succ_offt
 
             # move above goal position, move to goal, drop, move above goal
             robot.move_ee_above(g_pos_to, orn=g_orn_to)
-            robot.move_ee(g_pos_to+[0, 0, 0.01], orn=g_orn_to)
-            robot.suction(False)
-            robot.move_ee_away([0, 0, 0.01])
+            robot.move_ee(g_pos_to+[0, 0, 0.002], orn=g_orn_to)
 
-            debug = False
+            for _ in range(100): # block has inertia from the robot moving
+                p.stepSimulation()
+                if debug:
+                    time.sleep(robot.move_timestep)
+
+            robot.suction(False)
+
+            # p.changeDynamics(c_oid, -1, mass=0.1)
             for _ in range(500):
                 p.stepSimulation()
                 if debug:
                     time.sleep(robot.move_timestep)
 
             robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
+            p.changeDynamics(c_oid, -1, mass=[0.5, 0.02, 0.01][l_num])
+            # p.resetBasePositionAndOrientation(c_oid, g_pos_cen, g_orn)  # TODO for testing, remove later
+
 
     # metric collection
     pos_err, orn_err, ora_err = [], [], []
@@ -328,9 +346,7 @@ def main():
     print(f'averaged jaccard similarity of inferred layers: {javg}')
     print(f'planning time: {planning_time:.6f} (dependence graph) and {withsorting_time:.6f} (with sorting)')
 
-    while True:
-        time.sleep(robot.move_timestep)
-        p.stepSimulation()
+    time.sleep(100000)
 
     # logging in file, analysis/readout script
 
