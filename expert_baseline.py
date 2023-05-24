@@ -78,7 +78,6 @@ def sim_step():
     p.stepSimulation()
 
 
-
 def rearrangement_metrics(moved_idx, curr_state, g_poss, g_orns):
     pos_err, orn_err, ora_err = [], [], []
     for obj_idx in moved_idx:
@@ -90,8 +89,8 @@ def rearrangement_metrics(moved_idx, curr_state, g_poss, g_orns):
         pos_err.append(dist_e(c_pos, g_pos))
         orn_err.append(dist_q(c_orn, g_orn))
 
-        qa = quat_angle(c_orn, g_orn) % 2*np.pi
-        qa = min(qa, 2*np.pi - qa)
+        qa = quat_angle(c_orn, g_orn) % 2 * np.pi
+        qa = min(qa, 2 * np.pi - qa)
         ora_err.append(qa)
 
     # report metrics
@@ -108,35 +107,39 @@ def rearrangement_metrics(moved_idx, curr_state, g_poss, g_orns):
     # print(f'planning time: {planning_time:.6f} (dependence graph) and {withsorting_time:.6f} (with sorting)')
 
     return {
-        'pos_err': pos_err, 'pos_mean': np.mean(pos_err), 'pos_std': np.std(pos_err), 'pos_min': np.min(pos_err), 'pos_max': np.max(pos_err),
-        'orn_err': orn_err, 'orn_mean': np.mean(orn_err), 'orn_std': np.std(orn_err), 'orn_min': np.min(orn_err), 'orn_max': np.max(orn_err),
-        'ora_err': ora_err, 'ora_mean': np.mean(ora_err), 'ora_std': np.std(ora_err), 'ora_min': np.min(ora_err), 'ora_max': np.max(ora_err),
+        'pos_err': pos_err, 'pos_mean': np.mean(pos_err), 'pos_std': np.std(pos_err), 'pos_min': np.min(pos_err),
+        'pos_max': np.max(pos_err),
+        'orn_err': orn_err, 'orn_mean': np.mean(orn_err), 'orn_std': np.std(orn_err), 'orn_min': np.min(orn_err),
+        'orn_max': np.max(orn_err),
+        # 'ora_err': ora_err, 'ora_mean': np.mean(ora_err), 'ora_std': np.std(ora_err), 'ora_min': np.min(ora_err),
+        # 'ora_max': np.max(ora_err),
     }
 
 
 def planning(node_graph, dep_net, dep_g):
     # infer scene structure/planning
-    start = time.time()
-    pred_graph = scene_graph(node_graph, dep_model=dep_net)  # TODO add adaptation to reduce threshold
-    inference_time = time.time() - start
-    pred_layers = list(toposort(dep_dict(pred_graph)))
-    planning_time = time.time() - start
+    # start = time.time()
+    # pred_graph = scene_graph(node_graph, dep_model=dep_net)  # TODO add adaptation to reduce threshold
+    # inference_time = time.time() - start
+    # pred_layers = list(toposort(dep_dict(pred_graph)))
+    # planning_time = time.time() - start
     gt_graph = dep_g
 
     # get jaccard similarity of layers # list(toposort(dep_dict(gt_graph)))
-    gt_layers = list(toposort(dep_dict(gt_graph)))
-    layer_jaccards = [jaccard(gt_l, pr_l) for gt_l, pr_l in zip_longest(list(gt_layers), list(pred_layers),
-                                                                        fillvalue=set())]
-    mean_jaccard = mean(layer_jaccards)
+    gt_dict = dep_dict(gt_graph)
+    # gt_layers = list(toposort(gt_dict))
+    # layer_jaccards = [jaccard(gt_l, pr_l) for gt_l, pr_l in zip_longest(list(gt_layers), list(pred_layers),
+    #                                                                     fillvalue=set())]
+    # mean_jaccard = mean(layer_jaccards)
 
-    return pred_layers, {
-        'inference_time': inference_time,
-        'planning_time': planning_time,
-        'layer_jaccards': layer_jaccards,
-        'mean_jaccard': mean_jaccard,
-        'pred_graph': pred_graph,
-        'gt_graph': gt_graph,
-        'graphs_equal': (gt_graph == pred_graph).all()
+    return gt_dict, {
+        # 'inference_time': inference_time,
+        # 'planning_time': planning_time,
+        # 'layer_jaccards': layer_jaccards,
+        # 'mean_jaccard': mean_jaccard,
+        # 'pred_graph': pred_graph,
+        # 'gt_graph': gt_graph,
+        # 'graphs_equal': (gt_graph == pred_graph).all()
     }
 
 
@@ -150,61 +153,62 @@ def sim_offset_adjustment(o_id, g_pos, g_orn):
     p.resetBasePositionAndOrientation(o_id, g_pos, g_orn)
 
 
-def rearrangement(robot, pred_layers, curr_state, poss, orns, timeout=300000, control_fix=False):
+def next_obj(obj_idxs, gt_dict: dict, already_placed: set):
+    tries = 0
+    while True:
+        tries += 1
+        obj_idx = np.random.choice(list(set(obj_idxs)-already_placed))
+        if can_be_placed(obj_idx, gt_dict, already_placed):
+            return obj_idx, tries
+
+
+def can_be_placed(obj_idx: int, gt_dict: dict, already_placed: set):
+    return gt_dict[obj_idx] <= already_placed
+
+
+def rearrangement(gt_dict, curr_state, poss, orns, timeout=300000, control_fix=False):
     start_time = time.time()
 
+    obj_ids = curr_state.obj_ids
+    num_objs = len(obj_ids)
+    obj_idxs = np.arange(num_objs)
     moved_idx = []
-    for l_num, layer in enumerate(pred_layers):
-        for obj_idx in layer:
-            moved_idx.append(obj_idx)
-            c_oid = curr_state.obj_ids[obj_idx]
+    move_times = []
+    move_try_nums = []
 
-            # in real, position obtained from point-cloud and orientation from TEASER++
-            c_pos_cen, c_orn = p.getBasePositionAndOrientation(c_oid)
-            g_pos_cen, g_orn = get_target_pose(obj_idx, poss, orns)
-            c_pos = np.array(c_pos_cen)  # get_suc_point(c_pcds, c_oids, c_oid)
-            g_pos_cen = np.array(g_pos_cen)
+    # print(f'NUMBER OF OBJECTS {num_objs}')
 
-            # obtain goal orientation
-            g_orn_to = p.getDifferenceQuaternion(c_orn, g_orn)  # in real, done with TEASER++
+    while len(moved_idx) < num_objs:
+        start_move = time.time()
+        nobj_idx, move_try_num = next_obj(obj_idxs, gt_dict, set(moved_idx))
+        move_time = time.time() - start_move
 
-            # move above cur position, move to curr, pick, move above curr
-            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.2))
-            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.05))
-            c_pos_from, _ = robot.move_ee_down(c_pos, orn=(0, 0, 0, 1))
-            robot.suction(True)
-            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1))
+        moved_idx.append(nobj_idx)
+        move_times.append(move_time)
+        move_try_nums.append(move_try_num)
 
-            # obtain goal pose
-            succ_offt = np.subtract(c_pos_from, c_pos_cen)
-            g_orn_mat = R.from_quat(g_orn_to).as_matrix()
-            rotated_succ_offt = g_orn_mat @ succ_offt
-            g_pos_to = g_pos_cen + rotated_succ_offt
+        c_oid = curr_state.obj_ids[nobj_idx]
 
-            # move above goal position, move to goal, drop, move above goal
-            robot.move_ee_above(g_pos_to, orn=g_orn_to)
-            robot.move_ee(g_pos_to + [0, 0, 0.003], orn=g_orn_to)
+        # in real, position obtained from point-cloud and orientation from TEASER++
+        c_pos_cen, c_orn = p.getBasePositionAndOrientation(c_oid)
+        g_pos_cen, g_orn = get_target_pose(nobj_idx, poss, orns)
+        c_pos = np.array(c_pos_cen)  # get_suc_point(c_pcds, c_oids, c_oid)
+        g_pos_cen = np.array(g_pos_cen)
 
-            for _ in range(100):  # block has inertia from the robot moving
-                p.stepSimulation()
+        # print(f'MOVING {c_oid} to {g_pos_cen}, {g_orn}')
+        p.resetBasePositionAndOrientation(c_oid, g_pos_cen, g_orn)
+        for _ in range(1000):
+            p.stepSimulation()
 
-            robot.suction(False)
-            p.changeDynamics(c_oid, -1, mass=0.00001)
+        if (time.time() - start_time) > timeout:
+            return False, moved_idx, rearrangement_metrics(moved_idx, curr_state, poss, orns)
 
-            if control_fix and close(*p.getBasePositionAndOrientation(c_oid), g_pos_cen, g_orn):
-                sim_offset_adjustment(c_oid, g_pos_cen, g_orn)
-
-            for _ in range(500):
-                p.stepSimulation()
-
-            robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
-            xl_num = min(2, l_num)
-            p.changeDynamics(c_oid, -1, mass=[0.5, 0.02, 0.01][xl_num])
-            # fix_object(c_oid)
-            if (time.time() - start_time) > timeout:
-                return False, moved_idx, rearrangement_metrics(moved_idx, curr_state, poss, orns)
-
-    return True, moved_idx, rearrangement_metrics(moved_idx, curr_state, poss, orns)
+    return True, moved_idx, {**rearrangement_metrics(moved_idx, curr_state, poss, orns),
+                             'move_times': np.array(move_times),
+                             'move_try_nums': np.array(move_try_nums),
+                             'total_move_time': sum(move_times),
+                             'total_move_try_num': sum(move_try_nums)
+                             }
 
 
 def setup_env(oid_tid, node_ids, poss, orns, headless=False):
@@ -220,27 +224,11 @@ def setup_env(oid_tid, node_ids, poss, orns, headless=False):
     return robot, curr_state, g_oids
 
 
-def recreate_scene(scene_num):
-    scene_name = f'{scene_num // 1000}_{scene_num % 1000}.npz'
-    all_path = osp.join(ADPATH, scene_name)
-
-    all_file = np.load(all_path)
-    to_extract = ['pc', 'oid', 'tid', 'depg', 'pos', 'orn', 'node_ids']
-    pcds, o_ids, t_ids, dep_g, g_poss, g_orns, node_ids = [all_file[x] for x in to_extract]
-
-    setup_basic()
-    loader = PBObjectLoader('Generation/urdfc')
-    oid_tid = dict(zip(o_ids, t_ids.astype(int)))
-
-    visualize(make_pcd(pcds, tid_colors(t_ids)))
-
-    for g_oid, g_pos, g_orn in zip(np.unique(o_ids).astype(int), g_poss, g_orns):
-        tid = oid_tid[g_oid]
-        typ = tid_name(tid)
-        loader.load_obj(typ, g_pos, g_orn)
-
-    return loader
-
+def get_segment(num, seg_keys):
+    for l_bound, u_bound in seg_keys:
+        if l_bound < num <= u_bound:
+            return l_bound, u_bound
+    return None
 
 def main():
     # load models
@@ -255,37 +243,45 @@ def main():
     success_p_thresh, success_o_thresh = 0.01, 0.2
 
     # what scenes to test on
-    l_bound, u_bound = 15, 20
-    data_count = 100
+    l_bound, u_bound = 0, 20
+    data_count = 99999
 
     # load data and do experiments
     _, _, test_loader = get_scenesdataloader(feat_net)
-    count = 0
     print('done loading')
     total_successes = 0
     total_completions = 0
+    max_examples = 100
+
+    data_counts = {(0, 10): 0,
+                   (10, 15): max_examples,
+                   (15, 20): max_examples,
+                   (20, 100): max_examples,
+                   None: max_examples}
+
     for i, data in enumerate(test_loader):
-        if not condition(data, l_bound, u_bound):
-            continue
+        # if not condition(data, l_bound, u_bound):
+        #     continue
         # if i not in [1134, 472, 490, 523, 570, 858, 1045, 1048, 1134]: # 570 setup issue, 1045 pred issue.
         #     continue
-        count += 1
-        if count >= data_count:
-            break
+        # count += 1
+        # if count >= data_count:
+        #     break
 
-        try:
-            robot, initial_state, g_oids = setup_env(data.oid_tid[0][0], data.node_ids[0],
-                                                     data.g_poss[0], data.g_orns[0], headless=True)
+        cur_seg = get_segment(len(data.adj_mat[0]), data_counts.keys())
 
-            robot.move_timestep = 0
-            pred_layers, p_metrics = planning(data, dep_net, data.adj_mat[0])
-            timeout, moved_idx, r_metrics = rearrangement(robot, pred_layers, initial_state, data.g_poss[0], data.g_orns[0],
-                                                          control_fix=True)
-
-            p.disconnect()
-        except TypeError as e:
-            count -= 1
+        if data_counts[cur_seg] > 100:
             continue
+
+        robot, initial_state, g_oids = setup_env(data.oid_tid[0][0], data.node_ids[0],
+                                                 data.g_poss[0], data.g_orns[0], headless=True)
+
+        robot.move_timestep = 0
+        gt_dict, p_metrics = planning(data, dep_net, data.adj_mat[0])
+        timeout, moved_idx, r_metrics = rearrangement(gt_dict, initial_state, data.g_poss[0], data.g_orns[0],
+                                                      control_fix=True)
+
+        p.disconnect()
 
         # save/print metrics for scene
         p_s = r_metrics['pos_err'] < success_p_thresh
@@ -294,22 +290,38 @@ def main():
 
         com, suc = completion.mean(), completion.all()
 
-        result = {'moved_idx': moved_idx,
+        if not suc:
+            continue
+
+        data_counts[cur_seg] += 1
+        cur_count = sum(data_counts.values())
+
+        result = {'moved_idx': np.array(moved_idx),
                   **p_metrics, **r_metrics,
                   'num_nodes': len(data.adj_mat[0]),
                   'completion': com,
                   'success': suc,
-                  'data_num': count,
-                  'data_idx': i}
+                  'data_num': cur_count,
+                  'data_idx': i,
+                  'seg': cur_seg}
         print(result)
-        print(f'[{count}]({i}) success: {suc}, completion: {com}')
+        print(f'[{cur_count}]({i}) success: {suc}, completion: {com}')
         results.append(result)
+
+        if i % 100 == 0:
+            with open(f'results/expert/dp{i}_results_expertrandom_{data_count}_{l_bound}-{u_bound}_{time.time()}', 'wb') as f:
+                pickle.dump(results, f)
 
         total_completions += com
         total_successes += suc
 
-        print(f'Total success rate: {total_successes/count * 100}')
-        print(f'Total completion rate: {total_completions/count * 100}')
+        print(f'Total success rate: {total_successes / cur_count * 100}')
+        print(f'Total completion rate: {total_completions / cur_count * 100}')
+        print(f'Number of nodes: {result["num_nodes"]}')
+        print(f'Total Move Tries: {result["total_move_try_num"]}, Move Tries: {result["move_try_nums"]}')
+        print(f'Total Move time: {result["total_move_time"]}\n\n')
+
+        print(data_counts)
 
     # save/rpint all metrics
     success_rate = mean([r['success'] for r in results])
@@ -329,7 +341,7 @@ def main():
     std_mean_jacc = std([r['mean_jaccard'] for r in results])
 
     print('\n\n[FINAL METRICS]')
-    print(f'success rate: {success_rate}, completion rate: {completion_rate}\n')
+    print(f'success rate: {success_rate*100}, completion rate: {completion_rate*100}\n')
 
     print(f'mean position error:\t\t{avg_pos_mean}+/-{avg_pos_std} (m)')
     print(f'mean orientation error:\t\t{avg_orn_mean}+/-{avg_orn_std} (0-1)')
@@ -337,7 +349,7 @@ def main():
     print(f'mean planning time\t\t\t{avg_plan_time}+/-{std_plan_time} (s)')
     print(f'averaged mean jaccard\t\t{avg_mean_jacc}+/-{std_mean_jacc}')
 
-    with open(f'results/results_{data_count}_{l_bound}-{u_bound}_{time.time()}', 'wb') as f:
+    with open(f'results/expert/results_expertrandom_{data_count}_{l_bound}-{u_bound}_{time.time()}', 'wb') as f:
         pickle.dump(results, f)
 
     # recreate_scene(9000)
