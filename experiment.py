@@ -255,8 +255,8 @@ def main():
     success_p_thresh, success_o_thresh = 0.01, 0.2
 
     # what scenes to test on
-    l_bound, u_bound = 15, 20
-    data_count = 100
+    l_bound, u_bound = 0, 10
+    data_count = 800
 
     # load data and do experiments
     _, _, test_loader = get_scenesdataloader(feat_net)
@@ -337,7 +337,7 @@ def main():
     print(f'mean planning time\t\t\t{avg_plan_time}+/-{std_plan_time} (s)')
     print(f'averaged mean jaccard\t\t{avg_mean_jacc}+/-{std_mean_jacc}')
 
-    with open(f'results/results_{data_count}_{l_bound}-{u_bound}_{time.time()}', 'wb') as f:
+    with open(f'results/results_{count}_{l_bound}-{u_bound}_{time.time()}', 'wb') as f:
         pickle.dump(results, f)
 
     # recreate_scene(9000)

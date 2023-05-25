@@ -1,4 +1,5 @@
 import pickle
+from typing import Iterable
 
 import pybullet as p
 import pybullet_data
@@ -153,11 +154,21 @@ def sim_offset_adjustment(o_id, g_pos, g_orn):
     p.resetBasePositionAndOrientation(o_id, g_pos, g_orn)
 
 
-def next_obj(obj_idxs, gt_dict: dict, already_placed: set):
+def rnext_obj(obj_idxs, gt_dict: dict, already_placed: set):
     tries = 0
+    tried = set()
     while True:
         tries += 1
-        obj_idx = np.random.choice(list(set(obj_idxs)-already_placed))
+        obj_idx = np.random.choice(list(set(obj_idxs)-already_placed-tried))
+        if can_be_placed(obj_idx, gt_dict, already_placed):
+            return obj_idx, tries
+        tried.add(obj_idx)
+
+
+def inext_obj(obj_idxs, gt_dict: dict, already_placed: set):
+    tries = 0
+    for obj_idx in [obj for obj in obj_idxs if obj not in already_placed]:
+        tries += 1
         if can_be_placed(obj_idx, gt_dict, already_placed):
             return obj_idx, tries
 
@@ -166,7 +177,7 @@ def can_be_placed(obj_idx: int, gt_dict: dict, already_placed: set):
     return gt_dict[obj_idx] <= already_placed
 
 
-def rearrangement(gt_dict, curr_state, poss, orns, timeout=300000, control_fix=False):
+def rearrangement(gt_dict, curr_state, poss, orns, next_obj, timeout=300000):
     start_time = time.time()
 
     obj_ids = curr_state.obj_ids
@@ -176,11 +187,14 @@ def rearrangement(gt_dict, curr_state, poss, orns, timeout=300000, control_fix=F
     move_times = []
     move_try_nums = []
 
+    shuffled_obj_idxs = obj_idxs.copy()
+    np.random.shuffle(shuffled_obj_idxs)
+
     # print(f'NUMBER OF OBJECTS {num_objs}')
 
     while len(moved_idx) < num_objs:
         start_move = time.time()
-        nobj_idx, move_try_num = next_obj(obj_idxs, gt_dict, set(moved_idx))
+        nobj_idx, move_try_num = next_obj(shuffled_obj_idxs, gt_dict, set(moved_idx))
         move_time = time.time() - start_move
 
         moved_idx.append(nobj_idx)
@@ -230,7 +244,8 @@ def get_segment(num, seg_keys):
             return l_bound, u_bound
     return None
 
-def main():
+
+def main(selection_func, base_type):
     # load models
     feat_net = load_model(ObjectNet, 'cn_test_best_model.pt')
     feat_net.eval()
@@ -243,21 +258,23 @@ def main():
     success_p_thresh, success_o_thresh = 0.01, 0.2
 
     # what scenes to test on
-    l_bound, u_bound = 0, 20
-    data_count = 99999
+    # l_bound, u_bound = 0, 20
+    # data_count = 99999
 
     # load data and do experiments
     _, _, test_loader = get_scenesdataloader(feat_net)
     print('done loading')
     total_successes = 0
     total_completions = 0
-    max_examples = 100
 
-    data_counts = {(0, 10): 0,
-                   (10, 15): max_examples,
-                   (15, 20): max_examples,
-                   (20, 100): max_examples,
-                   None: max_examples}
+    # data_counts = {(0, 10): 0,
+    #                (10, 15): max_examples,
+    #                (15, 20): max_examples,
+    #                (20, 100): max_examples,
+    #                None: max_examples}
+    cur_seg = (0, 10)
+    data_counts = {cur_seg: 0}
+    max_examples = 1000
 
     for i, data in enumerate(test_loader):
         # if not condition(data, l_bound, u_bound):
@@ -268,9 +285,12 @@ def main():
         # if count >= data_count:
         #     break
 
-        cur_seg = get_segment(len(data.adj_mat[0]), data_counts.keys())
+        # cur_seg = get_segment(len(data.adj_mat[0]), data_counts.keys())
 
-        if data_counts[cur_seg] > 100:
+        lb, ub = cur_seg
+        if not (lb < len(data.adj_mat[0]) <= ub):
+            continue
+        if data_counts[cur_seg] >= max_examples:
             continue
 
         robot, initial_state, g_oids = setup_env(data.oid_tid[0][0], data.node_ids[0],
@@ -279,7 +299,7 @@ def main():
         robot.move_timestep = 0
         gt_dict, p_metrics = planning(data, dep_net, data.adj_mat[0])
         timeout, moved_idx, r_metrics = rearrangement(gt_dict, initial_state, data.g_poss[0], data.g_orns[0],
-                                                      control_fix=True)
+                                                      selection_func)
 
         p.disconnect()
 
@@ -308,9 +328,11 @@ def main():
         print(f'[{cur_count}]({i}) success: {suc}, completion: {com}')
         results.append(result)
 
-        if i % 100 == 0:
-            with open(f'results/expert/dp{i}_results_expertrandom_{data_count}_{l_bound}-{u_bound}_{time.time()}', 'wb') as f:
-                pickle.dump(results, f)
+        # if i % 100 == 0:
+        #     seg_str = "-".join(str(x) for x in cur_seg)
+        #     file_name = f'results/expert/dp{i}_results_expertrandom_{max_examples}_{seg_str}_{time.time()}'
+        #     with open(file_name, 'wb') as f:
+        #         pickle.dump(results, f)
 
         total_completions += com
         total_successes += suc
@@ -332,24 +354,26 @@ def main():
     avg_orn_mean = mean([r['orn_mean'] for r in results])
     avg_orn_std = mean([r['orn_std'] for r in results])
 
-    avg_pred_time = mean([r['inference_time'] for r in results])
-    avg_plan_time = mean([r['planning_time'] for r in results])
-    avg_mean_jacc = mean([r['mean_jaccard'] for r in results])
-
-    std_pred_time = std([r['inference_time'] for r in results])
-    std_plan_time = std([r['planning_time'] for r in results])
-    std_mean_jacc = std([r['mean_jaccard'] for r in results])
+    # avg_pred_time = mean([r['inference_time'] for r in results])
+    # avg_plan_time = mean([r['planning_time'] for r in results])
+    # avg_mean_jacc = mean([r['mean_jaccard'] for r in results])
+    #
+    # std_pred_time = std([r['inference_time'] for r in results])
+    # std_plan_time = std([r['planning_time'] for r in results])
+    # std_mean_jacc = std([r['mean_jaccard'] for r in results])
 
     print('\n\n[FINAL METRICS]')
     print(f'success rate: {success_rate*100}, completion rate: {completion_rate*100}\n')
 
     print(f'mean position error:\t\t{avg_pos_mean}+/-{avg_pos_std} (m)')
     print(f'mean orientation error:\t\t{avg_orn_mean}+/-{avg_orn_std} (0-1)')
-    print(f'structure inference time:\t{avg_pred_time}+/-{std_pred_time} (s)')
-    print(f'mean planning time\t\t\t{avg_plan_time}+/-{std_plan_time} (s)')
-    print(f'averaged mean jaccard\t\t{avg_mean_jacc}+/-{std_mean_jacc}')
+    # print(f'structure inference time:\t{avg_pred_time}+/-{std_pred_time} (s)')
+    # print(f'mean planning time\t\t\t{avg_plan_time}+/-{std_plan_time} (s)')
+    # print(f'averaged mean jaccard\t\t{avg_mean_jacc}+/-{std_mean_jacc}')
 
-    with open(f'results/expert/results_expertrandom_{data_count}_{l_bound}-{u_bound}_{time.time()}', 'wb') as f:
+    seg_str = "-".join(str(x) for x in cur_seg)
+    file_name = f'results/classical/results_{base_type}_{max_examples}_{seg_str}_{int(time.time())}'
+    with open(file_name, 'wb') as f:
         pickle.dump(results, f)
 
     # recreate_scene(9000)
@@ -357,4 +381,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    for sel_func, b_type in zip([inext_obj, rnext_obj], ['iterative', 'random']):
+        main(sel_func, b_type)

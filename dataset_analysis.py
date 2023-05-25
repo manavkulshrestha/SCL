@@ -1,4 +1,4 @@
-from Datasets.dutility import get_alldataloaders
+from Datasets.dutility import get_alldataloaders, get_scenesdataloader
 from nn.Network import ObjectNet
 from utility import load_model
 
@@ -14,10 +14,10 @@ def main():
 
     # load data and do experiments
     count = 0
-    _, _, test_loader = get_alldataloaders(feat_net)
+    _, _, test_loader = get_scenesdataloader(feat_net)
     print('done loading everything')
     for i, data in enumerate(test_loader):
-        count += 1 if condition(data, 25, 30) else 0
+        count += 1 if condition(data, 0, 10) else 0
 
     print(f'{count}/{len(test_loader)} data points satisfy condition')
 

@@ -6,7 +6,7 @@ from os import path as osp
 import torch
 import open3d as o3d
 import pybullet as p
-
+from torch import Tensor
 
 device = torch.device('cuda')
 RP_ROOT = osp.abspath('/home/mk/rp/')
@@ -213,3 +213,12 @@ def std(lst: Union[Iterable]) -> float:
 def unit_vec(lst: np.ndarray) -> np.ndarray:
     mag = norm(lst)
     return (lst/mag) if mag > 0 else 0
+
+
+def compare_rows(tensor1: Tensor, tensor2: Tensor):
+    row_equality = torch.all(torch.eq(tensor1, tensor2), dim=1)
+    return row_equality
+
+
+def list_minus(lst: list, to_subtract: Iterable):
+    return [x for x in lst if x not in to_subtract]
