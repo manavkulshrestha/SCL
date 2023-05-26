@@ -5,9 +5,11 @@ from utility import std, mean
 
 last_0_10 = 'results_100_0-10_1684862573.1763673'
 last_10_15 = 'results_100_10-15_1684864331.5446715'
-expert = 'results_expertrandom_100_0-10_1684878390.7436266'
+# expert = 'results_expertrandom_100_0-10_1684878390.7436266'
 
 was_legitmaybe = 'results_100_0-10_1684869182.5276263'
+
+base_0_10 = 'results_iterative_732_0-10_1684976635'
 
 
 def recovery(results):
@@ -27,10 +29,7 @@ def nodes(results):
     print(f'{mean(num_nodes)}+/-{std(num_nodes)}, min: {min(num_nodes)}, max: {max(num_nodes)}')
 
 
-def main():
-    with open(f'results/{expert}', 'rb') as f:
-        results = pickle.load(f)
-
+def move_nums(results):
     move_times = [r['total_move_time'] for r in results]
     move_tries = [r['total_move_try_num'] for r in results]
 
@@ -38,6 +37,14 @@ def main():
     print(f'Expert planning tries: {mean(move_tries)}+/-{std(move_tries)}')
     nodes(results)
 
+
+def main():
+    with open(f'results/classical/{base_0_10}', 'rb') as f:
+        results = pickle.load(f)
+
+    good_is = [r['data_idx'] for r in results]
+    print(good_is)
+    print(len(good_is))
 
 if __name__ == '__main__':
     main()

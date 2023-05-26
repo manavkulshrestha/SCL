@@ -139,7 +139,7 @@ def main():
     _, _, test_loader = get_scenesdataloader(feat_net)
     print('done loading')
 
-    cur_seg = (15, 20)
+    cur_seg = (20, 25)
     data_counts = {cur_seg: 0}
     max_examples = 99999
 

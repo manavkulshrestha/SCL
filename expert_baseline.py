@@ -173,6 +173,7 @@ def inext_obj(obj_idxs, gt_dict: dict, already_placed: set):
             return obj_idx, tries
 
 
+
 def can_be_placed(obj_idx: int, gt_dict: dict, already_placed: set):
     return gt_dict[obj_idx] <= already_placed
 
@@ -245,7 +246,7 @@ def get_segment(num, seg_keys):
     return None
 
 
-def main(selection_func, base_type):
+def main(selection_func, base_type, cur_seg):
     # load models
     feat_net = load_model(ObjectNet, 'cn_test_best_model.pt')
     feat_net.eval()
@@ -272,7 +273,7 @@ def main(selection_func, base_type):
     #                (15, 20): max_examples,
     #                (20, 100): max_examples,
     #                None: max_examples}
-    cur_seg = (0, 10)
+    # cur_seg = (0, 10)
     data_counts = {cur_seg: 0}
     max_examples = 1000
 
@@ -381,5 +382,6 @@ def main(selection_func, base_type):
 
 
 if __name__ == '__main__':
-    for sel_func, b_type in zip([inext_obj, rnext_obj], ['iterative', 'random']):
-        main(sel_func, b_type)
+    for cur_seg in [(10, 15), (15, 20), (20, 25), (25, 50)]:
+        for sel_func, b_type in zip([inext_obj, rnext_obj], ['iterative', 'random']):
+            main(sel_func, b_type, cur_seg)

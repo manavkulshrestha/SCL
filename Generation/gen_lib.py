@@ -14,7 +14,7 @@ from bidict import bidict
 import time
 
 # ASSET_ROOT = os.path.abspath('urdfc')
-ASSET_ROOT = os.path.abspath('../Generation/urdfc')
+ASSET_ROOT = os.path.abspath('Generation/urdfc')
 
 obj_types = ['cube', 'cylinder', 'ccuboid', 'scuboid', 'tcuboid', 'roof', 'pyramid', 'cuboid']
 obj_primes = [trimesh.load(ASSET_ROOT + f'/{t}/tinker.obj') for t in obj_types]
