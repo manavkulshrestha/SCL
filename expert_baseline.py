@@ -159,7 +159,10 @@ def rnext_obj(obj_idxs, gt_dict: dict, already_placed: set):
     tried = set()
     while True:
         tries += 1
-        obj_idx = np.random.choice(list(set(obj_idxs)-already_placed-tried))
+        take_from = list(set(obj_idxs) - already_placed - tried)
+        if len(take_from) == 0:
+            return None
+        obj_idx = np.random.choice(take_from)
         if can_be_placed(obj_idx, gt_dict, already_placed):
             return obj_idx, tries
         tried.add(obj_idx)
@@ -171,7 +174,7 @@ def inext_obj(obj_idxs, gt_dict: dict, already_placed: set):
         tries += 1
         if can_be_placed(obj_idx, gt_dict, already_placed):
             return obj_idx, tries
-
+    return None
 
 
 def can_be_placed(obj_idx: int, gt_dict: dict, already_placed: set):
@@ -195,7 +198,11 @@ def rearrangement(gt_dict, curr_state, poss, orns, next_obj, timeout=300000):
 
     while len(moved_idx) < num_objs:
         start_move = time.time()
-        nobj_idx, move_try_num = next_obj(shuffled_obj_idxs, gt_dict, set(moved_idx))
+        nobj_data = next_obj(shuffled_obj_idxs, gt_dict, set(moved_idx))
+        if nobj_data is None:
+            return None
+
+        nobj_idx, move_try_num = nobj_data
         move_time = time.time() - start_move
 
         moved_idx.append(nobj_idx)
@@ -299,10 +306,12 @@ def main(selection_func, base_type, cur_seg):
 
         robot.move_timestep = 0
         gt_dict, p_metrics = planning(data, dep_net, data.adj_mat[0])
-        timeout, moved_idx, r_metrics = rearrangement(gt_dict, initial_state, data.g_poss[0], data.g_orns[0],
-                                                      selection_func)
+        rear = rearrangement(gt_dict, initial_state, data.g_poss[0], data.g_orns[0], selection_func)
 
         p.disconnect()
+        if rear is None:
+            continue
+        timeout, moved_idx, r_metrics = rear
 
         # save/print metrics for scene
         p_s = r_metrics['pos_err'] < success_p_thresh
@@ -384,4 +393,6 @@ def main(selection_func, base_type, cur_seg):
 if __name__ == '__main__':
     for cur_seg in [(10, 15), (15, 20), (20, 25), (25, 50)]:
         for sel_func, b_type in zip([inext_obj, rnext_obj], ['iterative', 'random']):
+            if cur_seg == (10, 15) and b_type == 'iterative':
+                continue
             main(sel_func, b_type, cur_seg)

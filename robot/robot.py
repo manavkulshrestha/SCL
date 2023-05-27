@@ -13,6 +13,9 @@ import time
 
 from utility import check_convergence, unit_vec, draw_sphere_marker
 
+# UR5_URDF_PATH = 'ur5/ur5.urdf'
+# ASSET_ROOT = 'assets/'
+
 UR5_URDF_PATH = 'ur5/ur5.urdf'
 ASSET_ROOT = 'robot/assets/'
 
@@ -132,7 +135,7 @@ def setup():
     for _ in range(100):
         p.stepSimulation()
 
-    time.sleep(10)
+    return ur5
 
 
 def main():
@@ -148,8 +151,15 @@ def main():
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
     plane_id = p.loadURDF("plane.urdf")
 
-    setup()
+    robot = setup()
+    while True:
+        print('> ', end='')
+        q_nopi = [float(x) for x in input().split(' ')]
+        # print(l)
+        # robot.set_q(list(np.array([-1, -0.5, 0.5, -0.5, -0.5, 0]) * np.pi))
+        robot.set_q(np.array(q_nopi)*np.pi)
 
 
+# [-1, -0.5, 0.5, -0.5, -0.5, 0]
 if __name__ == '__main__':
     main()
