@@ -238,11 +238,10 @@ class RobotiqGripper:
 
     def suction(self, on):
         if on:
-            self.send_str('SET POS 0\n')
-            # self._get_var('POS')
+            self.move_and_wait_for_pos(100, 64, 1)
+            final_pos, final_obj = self.move_and_wait_for_pos(0, 64, 1)
         else:
-            self.send_str('SET POS 101\n')
-            # self._get_var('POS')
+            self.move_and_wait_for_pos(100, 64, 1)
     def auto_calibrate(self, log: bool = True) -> None:
         """Attempts to calibrate the open and closed positions, by slowly closing and opening the gripper.
         :param log: Whether to print the results to log.
@@ -315,4 +314,5 @@ class RobotiqGripper:
         # report the actual position and the object status
         final_pos = self._get_var(self.POS)
         final_obj = cur_obj
+        print('pos', final_pos, 'obj', final_obj)
         return final_pos, RobotiqGripper.ObjectStatus(final_obj)

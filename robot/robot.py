@@ -129,8 +129,8 @@ class UR5:
         return p.getLinkState(self.id, self.ee_id)[4:6]
 
 
-def setup():
-    ur5 = UR5([-0.5, 0, 0])
+def setup(pos=[-0.5, 0, 0]):
+    ur5 = UR5(pos)
 
     for _ in range(100):
         p.stepSimulation()
@@ -152,12 +152,22 @@ def main():
     plane_id = p.loadURDF("plane.urdf")
 
     robot = setup()
-    while True:
-        print('> ', end='')
-        q_nopi = [float(x) for x in input().split(' ')]
-        # print(l)
-        # robot.set_q(list(np.array([-1, -0.5, 0.5, -0.5, -0.5, 0]) * np.pi))
-        robot.set_q(np.array(q_nopi)*np.pi)
+    # while True:
+    #     print('> ', end='') # -1 -0.5 0.5 -0.5 -0.5 0
+    #     q_nopi = [float(x) for x in input().split(' ')]
+    #     # print(l)
+    #     # robot.set_q(list(np.array([-1, -0.5, 0.5, -0.5, -0.5, 0]) * np.pi))
+    #     q = np.array(q_nopi)*np.pi
+    #     robot.set_q(q)
+    #     print(q)
+    #     print(robot.ee_pose)
+
+    file = np.load('../demo/test.npz')
+    qs = file['qs']
+
+    for q in qs:
+        robot.set_q(q)
+        time.sleep(0.1)
 
 
 # [-1, -0.5, 0.5, -0.5, -0.5, 0]

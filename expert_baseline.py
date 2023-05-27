@@ -391,8 +391,6 @@ def main(selection_func, base_type, cur_seg):
 
 
 if __name__ == '__main__':
-    for cur_seg in [(10, 15), (15, 20), (20, 25), (25, 50)]:
+    for cur_seg in [(15, 20), (20, 25), (25, 50)]:
         for sel_func, b_type in zip([inext_obj, rnext_obj], ['iterative', 'random']):
-            if cur_seg == (10, 15) and b_type == 'iterative':
-                continue
             main(sel_func, b_type, cur_seg)
