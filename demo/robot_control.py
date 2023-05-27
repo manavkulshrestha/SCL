@@ -1,5 +1,6 @@
 import time
 from collections import OrderedDict
+from socket import socket, AF_INET, SOCK_STREAM
 
 import numpy as np
 import rtde_control
@@ -8,6 +9,7 @@ import robotiq_gripper
 
 from typing import List
 
+from demo.VacuumGripper import VacuumGripper
 
 UR5_IP = '192.168.0.33'
 s = 0.5
@@ -152,7 +154,7 @@ def pick_test(con, rec, gripper):
     rmove_up(con, rec, meters=0.1)
 
     # to target hover
-    rmove(con, rec, offset=[0.1, 0, 0])
+    rmove(con, rec, offset=[0, 0.5, 0])
 
     # move down, place, go up again
     move_down_until_contact(con, speed=0.1)
@@ -163,23 +165,17 @@ def pick_test(con, rec, gripper):
 def main():
     con = rtde_control.RTDEControlInterface(UR5_IP)
     rec = rtde_receive.RTDEReceiveInterface(UR5_IP)
-    gripper = robotiq_gripper.RobotiqGripper()
-    gripper.connect(UR5_IP, 63352)
-    gripper.activate()
-    # gripper.activate()
-    # gripper.activate()
-    # gripper.activate()
-    # gripper.activate()
-
     con.setTcp([0, 0, 0.145, 0, 0, 0])
+    succ = VacuumGripper(UR5_IP, 63352)
+
     print('Done with setup. Waiting...', end='')
     # time.sleep(5)
     print('Executing')
 
-    # suction_test(gripper)
-    # gripper.suction(True)
-    # gripper.suction(False)
-    # rmove(con, rec, offset=[0, 0.5, 0])
+    print('NOW MINE')
+
+    pick_test(con, rec, succ)
+
 
 if __name__ == '__main__':
     main()
