@@ -1,4 +1,5 @@
 import os
+from typing import Iterable
 
 from absl import app
 from absl import flags
@@ -11,18 +12,20 @@ import pybullet_data
 
 import time
 
-from utility import check_convergence, unit_vec, draw_sphere_marker
+# from utility import check_convergence, unit_vec, draw_sphere_marker
+
 
 # UR5_URDF_PATH = 'ur5/ur5.urdf'
 # ASSET_ROOT = 'assets/'
 
 UR5_URDF_PATH = 'ur5/ur5.urdf'
-ASSET_ROOT = 'robot/assets/'
+ASSET_ROOT = '../robot/assets/'
 
 
 class UR5:
     def __init__(self, base_pos, move_timestep=0):
-        self.id = p.loadURDF(os.path.join(ASSET_ROOT, UR5_URDF_PATH), base_pos)
+        pth = os.path.join(ASSET_ROOT, UR5_URDF_PATH)
+        self.id = p.loadURDF(pth, base_pos)
 
         ddict = {'fixed': [], 'rigid': [], 'deformable': []}
         self.ee_id = 10
@@ -59,10 +62,16 @@ class UR5:
         # joints[2:] = (joints[2:]+np.pi) % (2*np.pi) - np.pi
         return joints
 
-    def move_ee(self, pos, orn=None, error_thresh=1e-2, speed=0.01, break_cond=lambda: False, max_iter=300, **kwargs):
-        tar_q = self.ik(pos, orn)
-        # marker = draw_sphere_marker(pos)
+    @classmethod
+    def _norm(cls, it: Iterable) -> float:
+        return np.linalg.norm(it)
 
+    @classmethod
+    def _unit_vec(cls, lst: np.ndarray) -> np.ndarray:
+        mag = cls._norm(lst)
+        return (lst / mag) if mag > 0 else 0
+
+    def move_q(self, tar_q, error_thresh=1e-2, speed=0.01, break_cond=lambda: False, max_iter=300, **kwargs):
         i = 0
         assert i < max_iter
         while i < max_iter:
@@ -72,8 +81,8 @@ class UR5:
                 # p.removeBody(marker)
                 return True, tar_q, cur_q
 
-            u = unit_vec(err_q)
-            step_q = cur_q + u*speed
+            u = self._unit_vec(err_q)
+            step_q = cur_q + u * speed
             p.setJointMotorControlArray(
                 bodyIndex=self.id,
                 jointIndices=self.joints,
@@ -86,6 +95,11 @@ class UR5:
 
         # p.removeBody(marker)
         return False, tar_q, cur_q
+
+    def move_ee(self, pos, orn=None, error_thresh=1e-2, speed=0.01, break_cond=lambda: False, max_iter=300, **kwargs):
+        tar_q = self.ik(pos, orn)
+        # marker = draw_sphere_marker(pos)
+        self.move_q(tar_q, error_thresh=error_thresh, speed=speed, break_cond=break_cond, max_iter=max_iter, **kwargs)
 
     def move_ee_down(self, pos, orn=(0, 0, 0, 1), **kwargs):
         """

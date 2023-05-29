@@ -89,7 +89,7 @@ def main():
 
     train_loader, val_loader, test_loader = get_depdataloaders(feat_net)
 
-    model = DNet(511, 256, 128, heads=16).to(device)
+    model = DNet(511, 256, 128, heads=32).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
 
     best_val_f1 = 0

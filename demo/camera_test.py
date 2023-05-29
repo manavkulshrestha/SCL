@@ -39,7 +39,7 @@ def img_stream():
 
 def pcd_test():
 
-    for i in range(300):
+    for i in range(100):
         frames = pipeline.wait_for_frames()
         print(i)
 
@@ -75,12 +75,17 @@ def main():
 
 
 if __name__ == '__main__':
+    # pipeline = rs.pipeline()
+    # config = rs.config()
+    # # config.enable_device('115422250069')
+    # config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30)  # 1280 × 720 is max depth res
+    # config.enable_stream(rs.stream.color, 1280, 720, rs.format.rgb8, 30)
+    # pipeline.start(config)
+
     pipeline = rs.pipeline()
     config = rs.config()
-    config.enable_device('115422250069')
-    config.enable_stream(rs.stream.depth, 1280, 720, rs.format.z16, 30) # 1280 × 720 apparently
-    config.enable_stream(rs.stream.color, 1280, 720, rs.format.rgb8, 30)
-
+    config.enable_stream(rs.stream.depth, 0)  # Enable depth stream
+    config.enable_stream(rs.stream.color, 0)  # Enable color stream
     pipeline.start(config)
 
     try:

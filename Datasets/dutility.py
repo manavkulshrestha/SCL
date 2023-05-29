@@ -25,7 +25,7 @@ def get_depdataloaders(feat_net, chunks=((0, 8000), (8000, 9000), (9000, 10000))
     val_loader = DataLoader(val_dataset, batch_size=batch_sizes[1], shuffle=shuffles[1])  # num workers causes error
     test_loader = DataLoader(test_dataset, batch_size=batch_sizes[2], shuffle=shuffles[2])  # num workers causes error
 
-    return None, None, test_loader
+    return train_loader, val_loader, test_loader
 
 
 def get_objdataloaders():

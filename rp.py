@@ -204,7 +204,9 @@ def main():
     # seed = 8174 or np.random.randint(0, 10000)
     # seed = 4978 or np.random.randint(0, 10000) # pred error, but recovers
 
-    seed = 4978
+    # seed = 4978
+
+    seed = 648 or np.random.randint(0, 10000)
     print(f'SEED: {seed}')
     np.random.seed(seed)
 
