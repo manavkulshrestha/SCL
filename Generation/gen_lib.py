@@ -591,6 +591,28 @@ class PBObjectLoader:
 PLANE_ROOT = os.path.abspath('urdf')
 
 
+def swap_objects(obj1, obj2):
+    pos1, orn1 = p.getBasePositionAndOrientation(obj1)
+    pos2, orn2 = p.getBasePositionAndOrientation(obj2)
+
+    p.resetBasePositionAndOrientation(obj1, pos2, orn2)
+    p.resetBasePositionAndOrientation(obj2, pos1, orn1)
+
+
+def place_next_to(obj1, obj2, offset):
+    pos1, orn1 = p.getBasePositionAndOrientation(obj1)
+    pos2, orn2 = p.getBasePositionAndOrientation(obj2)
+
+    p.resetBasePositionAndOrientation(obj1, np.add(pos2, offset), orn1)
+
+
+def put_in_other_orn(obj1, obj2):
+    pos1, orn1 = p.getBasePositionAndOrientation(obj1)
+    pos2, orn2 = p.getBasePositionAndOrientation(obj2)
+
+    p.resetBasePositionAndOrientation(obj1, pos1, orn2)
+
+
 def simulate_scene_pc(cameras, ret_img=False, slow=False, wait=0):
     # loader = PBObjectLoader('urdfc')
     loader = PBObjectLoader('Generation/urdfc')
@@ -764,6 +786,11 @@ def simulate_scene_pc(cameras, ret_img=False, slow=False, wait=0):
         for _ in range(100):
             p.stepSimulation()
             time.sleep(1. / 240.)
+
+        debug = True
+        while debug:
+            p.stepSimulation()
+            time.sleep(1/240)
 
         loader.populate_posorns()
         unpack_hstack = lambda pci, coi: np.hstack([pci, coi.reshape(-1, 1)])

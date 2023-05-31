@@ -2,12 +2,12 @@ import time
 from socket import socket, AF_INET, SOCK_STREAM
 
 class VacuumGripper:
-    def __init__(self, hostname, port, timeout=2):
+    def __init__(self, hostname, port, timeout=2, manual=False):
         self.socket = socket(AF_INET, SOCK_STREAM)
         self.socket.connect((hostname, port))
         self.socket.settimeout(timeout)
 
-        self.activate()
+        self.activate(manual=False)
 
     def _get(self, key):
         self.socket.sendall(f'GET {key}\n'.encode('UTF-8'))
@@ -28,20 +28,21 @@ class VacuumGripper:
             time.sleep(0.01)
             self._set(key, val)
 
-    def activate(self):
+    def activate(self, manual=False):
         self._set('ACT', 1)
         self._set_until_success('GTO', 0)
-        self._set('MOD', 0)
+        self._set('MOD', 1 if manual else 0)
+
+    def was_timeout(self):
+        return self._get('FLT') == 6
 
     def suction(self, on):
-        if self._get('FLT') == 6:  # there was a timeout
+        if self.was_timeout():  # there was a timeout
             self._set_until_success('GTO', 0)
 
-        if on:
-            self._set('POS', 0)
-            self._set('GTO', 1)
-        else:
-            self._set('POS', 255)
-            self._set('GTO', 1)
+        self._set_until_success('MOD', 0)
+
+        self._set('POS', 0 if on else 255)
+        self._set('GTO', 1)
 
         return self._get('POS')

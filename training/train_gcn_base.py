@@ -35,13 +35,13 @@ def train_epoch(model, epoch, loader, optimizer, progress=False):
         all_e_idx = batch.all_e_idx
         all_e_y = batch.all_e_y
 
-        # target_e_idx = all_e_idx
-        # target_e_y = all_e_y
+        target_e_idx = all_e_idx
+        target_e_y = all_e_y
 
         # negative sampling for class imbalance
-        n_e_idx = batched_negative_sampling(gt_e_idx, batch.batch)
-        target_e_idx = torch.cat([gt_e_idx, n_e_idx], dim=1)
-        target_e_y = torch.cat([torch.ones(gt_e_idx.size(1)), torch.zeros(n_e_idx.size(1))]).cuda()
+        # n_e_idx = batched_negative_sampling(gt_e_idx, batch.batch)
+        # target_e_idx = torch.cat([gt_e_idx, n_e_idx], dim=1)
+        # target_e_y = torch.cat([torch.ones(gt_e_idx.size(1)), torch.zeros(n_e_idx.size(1))]).cuda()
 
         out = model(batch.x, target_e_idx)
 

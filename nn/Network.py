@@ -1,6 +1,6 @@
 import torch
 from torch.nn import BatchNorm2d, LeakyReLU, Dropout, BatchNorm1d
-from torch_geometric.nn import GCNConv, PointNetConv, global_max_pool, MLP, radius, fps, GATv2Conv
+from torch_geometric.nn import GCNConv, PointNetConv, global_max_pool, MLP, radius, fps, GATv2Conv, GraphSAGE
 from torch_geometric.nn.dense.linear import Linear
 from torch import nn
 from utility import sliding, sample_exact, normalize, device
@@ -127,6 +127,7 @@ class ObjectNet(nn.Module):
 
             return outs.max(max_ax)[1].item() + 1
 
+
 class DNEncoder(torch.nn.Module):
         def __init__(self, in_c, h_c, out_c, heads=8, concat=False):
             super().__init__()
@@ -179,36 +180,60 @@ class DNet(torch.nn.Module):
 
         return out
 
+
 class GNEncoder(torch.nn.Module):
     def __init__(self, in_c, h_c, out_c):
         super().__init__()
-        self.layer1 = GCNConv(in_c, h_c)
-        self.layer2 = GCNConv(h_c, h_c)
-        self.layer3 = GCNConv(h_c, h_c)
-        self.layer4 = GCNConv(h_c, h_c)
-        self.layer5 = GCNConv(h_c, out_c)
-        # self.layer3 = GATv2Conv(h_c, out_c, heads=heads, concat=concat)
+        self.layer1 = GraphSAGE(in_c, h_c, 1)
+        self.layer2 = GraphSAGE(h_c, out_c, 1)
+        # self.layer3 = GCNConv(h_c, h_c)
+        # self.layer4 = GCNConv(h_c, h_c)
+        # self.layer5 = GraphSAGE(h_c, out_c, 1)
         self.activation = LeakyReLU()
 
     def forward(self, x, edge_index):
         x = self.layer1(x, edge_index)
         x = self.activation(x)
         x = self.layer2(x, edge_index)
-        x = self.activation(x)
-        x = self.layer3(x, edge_index)
-        x = self.activation(x)
-        x = self.layer4(x, edge_index)
-        x = self.activation(x)
-        x = self.layer5(x, edge_index)
+        # x = self.activation(x)
+        # x = self.layer3(x, edge_index)
+        # x = self.activation(x)
+        # x = self.layer4(x, edge_index)
+        # x = self.activation(x)
+        # x = self.layer5(x, edge_index)
 
         return x
+
+
+class GNDecoder(torch.nn.Module):
+    def __init__(self, h_c, **kwargs):
+        super().__init__()
+        self.linear1 = Linear(2*h_c, h_c)
+        self.linear2 = Linear(h_c, 1)
+        # # self.linear3 = Linear(h_c//2, 1)
+        self.activation = LeakyReLU()
+        pass
+
+    def forward(self, z, edge_label_index):
+        row, col = edge_label_index
+        zc = torch.cat([z[row], z[col]], dim=1)
+
+        zc = self.linear1(zc)
+        zc = self.activation(zc)
+        zc = self.linear2(zc)
+        # zc = self.activation(zc)
+        # zc = self.linear3(zc)
+
+        return zc.view(-1)
+
+        # return (z[row] * z[col]).sum(dim=-1)
 
 
 class GNet(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, **kwargs):
         super().__init__()
         self.encoder = GNEncoder(in_channels, hidden_channels, out_channels, **kwargs)
-        self.decoder = DNDecoder(out_channels, **kwargs)
+        self.decoder = GNDecoder(out_channels, **kwargs)
         self.loss = torch.nn.BCEWithLogitsLoss()
 
     def forward(self, x, edge_index):

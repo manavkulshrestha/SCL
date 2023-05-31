@@ -46,14 +46,14 @@ def setup_field(loader_target, slow=False):
     """ takes the goal state and lays out the involved objects in a grid on the plane """
     loader2 = PBObjectLoader('Generation/urdfc')
 
-    y_range = [-0.5, -0.2]
+    y_range = [-0.4, -0.2]
     x_range = [-.2, .2]
 
     num_objs = len(loader_target.obj_poses)
 
     idx = 0
-    for xpos in np.linspace(*x_range, 5):
-        for ypos in np.linspace(*y_range, 5):
+    for xpos in np.linspace(*x_range, 4):
+        for ypos in np.linspace(*y_range, 3):
             if idx >= num_objs:
                 break
 
@@ -62,12 +62,12 @@ def setup_field(loader_target, slow=False):
             pos, orn = loader_target.obj_poses[oid]
 
             # modify orn on xy plane
-            rot = R.from_rotvec([0, 0, np.random.uniform(-np.pi/2, np.pi/2)])
-            new_orn = (rot * R.from_quat(orn)).as_quat()
+            # rot = R.from_rotvec([0, 0, np.random.uniform(-np.pi/2, np.pi/2)])
+            # new_orn = (rot * R.from_quat(orn)).as_quat()
             # new_orn = orn
-            # new_orn = (0, 0, -np.pi/2) if typ == 'ccuboid' else (0, 0, 0)
+            new_orn = (0, 0, -np.pi/2) if typ == 'ccuboid' else (0, 0, 0)
 
-            c_oid = loader2.load_obj(otype=typ, pos=(xpos, ypos, 0.01), quat=new_orn, wait=100, slow=slow)
+            c_oid = loader2.load_obj(otype=typ, pos=(xpos, ypos, 0.01), euler=new_orn, wait=100, slow=slow)
             p.changeDynamics(c_oid, -1, mass=0.01)
             idx += 1
 
@@ -199,16 +199,15 @@ def main():
     # seed = 1369 or np.random.randint(0, 10000)
     # seed = 500 or np.random.randint(0, 10000)
     # seed = 9457 or np.random.randint(0, 10000)
-    seed = 8634 or np.random.randint(0, 10000) # maybe
+    # seed = 8634 or np.random.randint(0, 10000)
     # seed = 3097 or np.random.randint(0, 10000)
     # seed = 4276 or np.random.randint(0, 10000)
     # seed = 8174 or np.random.randint(0, 10000)
     # seed = 4978 or np.random.randint(0, 10000) # pred error, but recovers
 
-    # seed = 1900
+    # seed = 4978
 
-    # seed = np.random.randint(0, 10000)
-    # seed = 1900
+    seed = np.random.randint(0, 10000)
     print(f'SEED: {seed}')
     np.random.seed(seed)
 
@@ -241,8 +240,8 @@ def main():
     jacc = [jaccard(gt_l, pr_l) for gt_l, pr_l in zip_longest(gt_layers, pred_layers, fillvalue=set())]
     javg = mean(jacc)
 
-    plot_adj_mats(gt_graph, pred_graph, titles=['Ground Truth', 'Prediction'])
-    plt.show()
+    # plot_adj_mats(gt_graph, pred_graph, titles=['Ground Truth', 'Prediction'])
+    # plt.show()
 
     # if (gt_graph != pred_graph).any():
     # assert (gt_graph == pred_graph).all()
@@ -260,7 +259,7 @@ def main():
 
     # planning
     graph_dict = dep_dict(pred_graph)
-    topo_layers = list(toposort(graph_dict))
+    topo_layers = toposort(graph_dict)
     robot.move_timestep = 1/240
     robot.move_timestep = 0
 
@@ -320,8 +319,7 @@ def main():
                     time.sleep(robot.move_timestep)
 
             robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
-            lf_num = min(2, l_num)
-            p.changeDynamics(c_oid, -1, mass=[0.5, 0.02, 0.01][lf_num])
+            p.changeDynamics(c_oid, -1, mass=[0.5, 0.02, 0.01][l_num])
             # p.resetBasePositionAndOrientation(c_oid, g_pos_cen, g_orn)  # TODO for testing, remove later
 
 
@@ -350,7 +348,6 @@ def main():
     print(f'ora error: {np.mean(ora_err):.4f}+/-{np.std(ora_err):.4f}, max: {np.max(ora_err):.4f}, min: {np.min(ora_err):.4f}')
     print(f'averaged jaccard similarity of inferred layers: {javg}')
     print(f'planning time: {planning_time:.6f} (dependence graph) and {withsorting_time:.6f} (with sorting)')
-    print(f'number of objects: {len(moved_idx)}')
 
     time.sleep(100000)
 

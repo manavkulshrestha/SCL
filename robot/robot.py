@@ -18,8 +18,11 @@ import time
 # UR5_URDF_PATH = 'ur5/ur5.urdf'
 # ASSET_ROOT = 'assets/'
 
+# UR5_URDF_PATH = 'ur5/ur5.urdf'
+# ASSET_ROOT = '../robot/assets/'
+
 UR5_URDF_PATH = 'ur5/ur5.urdf'
-ASSET_ROOT = '../robot/assets/'
+ASSET_ROOT = 'robot/assets/'
 
 
 class UR5:
