@@ -162,8 +162,8 @@ OTNF_LOM_MAP = {
     'cuboid': cuboid_lom,
     'ccuboid': ccuboid_lom,
     'scuboid': scuboid_lom,
-    'tcuboid': tcuboid_lom,
-    'pyramid': pyramidnf_lom,
+    # 'tcuboid': tcuboid_lom,
+    # 'pyramid': pyramidnf_lom, # TODO try modified loms laying down
     'cylinder': cylinder_lom
 }
 
@@ -614,19 +614,17 @@ def put_in_other_orn(obj1, obj2):
     p.resetBasePositionAndOrientation(obj1, pos1, orn2)
 
 
-def simulate_scene_pc(cameras, ret_img=False, slow=False, wait=0):
+def simulate_scene_pc(cameras, ret_img=False, slow=False, wait=0, num_levels=4, level_bounds=None):
     # loader = PBObjectLoader('urdfc')
     loader = PBObjectLoader('Generation/urdfc')
 
     otypes = list(OM_MAP.keys())
     otcols = [x for x in otypes if x not in ['roof', 'pyramid', 'tcuboid', 'scuboid']]
 
-    N_LEVELS = 3
-
     bound = .1
 
     # maps that level's objects ids to their meshes
-    level = [[] for _ in range(N_LEVELS)]
+    level = [[] for _ in range(num_levels)]
 
     # TODO
     # maybe cm recreate everytime? # YES, later
@@ -642,12 +640,13 @@ def simulate_scene_pc(cameras, ret_img=False, slow=False, wait=0):
     # seed = 348 or np.random.randint(0, 10000)
     COLL_DIST = -1e-3
 
+    level_bounds = list(range(1, num_levels+1))[::-1] if level_bounds is None else level_bounds
+
     try:
-        #     print('PLACING LEVEL 0')
         # level 0
         cm0 = trimesh.collision.CollisionManager()
         attempt = 100
-        while attempt > 0:
+        while attempt > 0 and level_bounds[0] >= len(level[0]):
             # decide candidate state
             c_pos = (*np.random.uniform(-bound, bound, size=2), 0)
             c_typ = choice(otcols)
@@ -661,126 +660,168 @@ def simulate_scene_pc(cameras, ret_img=False, slow=False, wait=0):
             # is far enough
             dist, name = cm0.min_distance_single(c_mesh, return_name=True)
             if dist > bound / 5:
-                attempt = 10
-
                 # add to pybullet and collisionmanager
                 o_id = loader.load_obj(c_typ, euler=c_orn, pos=c_pos, wait=wait, slow=slow)
                 cm0.add_object(str(o_id), c_mesh)
-                #             print('placed', o_id)
-                #             input()
 
                 # record of which object meshes are in which level
                 level[0].append(o_id)
             else:
                 attempt -= 1
 
-        level0_avail = set(level[0])
+        # levels 1 onwards
+        for cur_level_idx in range(1, num_levels):
+            prev_level = level[cur_level_idx-1]
+            prev_avail = set(prev_level)
+            is_last = cur_level_idx == num_levels-1
 
-        #     print('PLACING LEVEL 1')
-        for i, o_id1 in enumerate(level[0]):
-            for j, o_id2 in enumerate(level[0][i + 1:], start=i + 1):
-                # run placement algorithm
-                oim_map, _ = loader.recreate([o_id1, o_id2])
-                mo1, mo2 = list(oim_map.values())
+            # place on object pairs
+            stop_placing = False
+            for i, o_id1 in enumerate(prev_level):
+                for j, o_id2 in enumerate(prev_level[i + 1:], start=i + 1):
+                    if stop_placing:
+                        continue
 
-                object_info = get_obj_pose(mo1, mo2)
+                    # run placement algorithm
+                    oim_map, _ = loader.recreate([o_id1, o_id2])
+                    mo1, mo2 = list(oim_map.values())
+
+                    object_info = get_obj_pose(mo1, mo2, allow_nonflat=is_last)
+                    if object_info is None:
+                        continue
+                    potype, pquat, ppos, pmesh = object_info
+
+                    # check for collisions with current level and place if none
+                    _, coli_sc = loader.recreate()
+                    cmi, _ = trimesh.collision.scene_to_collision(coli_sc)
+
+                    if (tdis := cmi.min_distance_single(pmesh)) > 0:
+                        o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
+                        level[cur_level_idx].append(o_id)
+                        prev_avail -= {o_id1, o_id2}
+
+                    stop_placing = len(level[cur_level_idx]) >= level_bounds[cur_level_idx]
+
+            # place single blocks on available spots
+            for avail in prev_avail:
+                if len(level[cur_level_idx]) >= level_bounds[cur_level_idx]:
+                    break
+
+                oim_map, _ = loader.recreate([avail])
+                mesh, = list(oim_map.values())
+
+                object_info = get_obj_pose(mesh, allow_nonflat=is_last)
                 if object_info is None:
-                    #                 print('couldn\'t place, distance too large')
                     continue
                 potype, pquat, ppos, pmesh = object_info
 
-                # check for collisions with current level and place if none
-                _, coli_sc = loader.recreate()
-                cmi, _ = trimesh.collision.scene_to_collision(coli_sc)
-
-                if not cmi.in_collision_single(pmesh):
-                    #             if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
-                    #                 print('SUCCESS!', tdis)
-                    o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
-                    level[1].append(o_id)
-                    level0_avail -= {o_id1, o_id2}
-        #             else:
-        #                 print('FAILURE!', tdis)
-
-        #             if input('see scene?') == 'y':
-        #                 raise Exception('break')
-
-        #     print('level 0 avail', level0_avail)
-
-        #     print('PLACING LEVEL 1 - AVAIL')
-        for avail in level0_avail:
-            oim_map, _ = loader.recreate([avail])
-            mesh, = list(oim_map.values())
-
-            object_info = get_obj_pose(mesh)
-            if object_info is None:
-                #             print(f'couldn\'t place, {avail} not flat')
-                continue
-            potype, pquat, ppos, pmesh = object_info
-
-            _, coli_sc = loader.recreate()
-            cmi, _ = trimesh.collision.scene_to_collision(coli_sc)
-
-            if not cmi.in_collision_single(pmesh):
-                #         if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
-                #             print('SUCCESS! single')
-                o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
-                level[1].append(o_id)
-        #         else:
-        #             print('FAILURE! single')
-        #             raise Exception('break')
-
-        level1_avail = set(level[1])
-
-        # level 2
-        #     print('PLACING LEVEL 2')
-        for i, o_id1 in enumerate(level[1]):
-            for j, o_id2 in enumerate(level[1][i + 1:], start=i + 1):
-                # run placement algorithm
-                oim_map, _ = loader.recreate([o_id1, o_id2])
-                mo1, mo2 = list(oim_map.values())
-
-                object_info = get_obj_pose(mo1, mo2, allow_nonflat=True)
-                if object_info is None:
-                    continue
-
-                potype, pquat, ppos, pmesh = object_info
-
-                # check for collisions with current level and place if none
                 _, coli_sc = loader.recreate()
                 cmi, _ = trimesh.collision.scene_to_collision(coli_sc)
 
                 if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
-                    #                 print('SUCCESS!', tdis)
                     o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
-                    level[2].append(o_id)
-                    level1_avail -= {o_id1, o_id2}
-        #             else:
-        #                 print('FAILURE!', tdis)
+                    level[cur_level_idx].append(o_id)
 
-        #     print('PLACING LEVEL 2 - AVAIL')
-        #     print(level1_avail)
-        for avail in level1_avail:
-            oim_map, _ = loader.recreate([avail])
-            mesh, = list(oim_map.values())
-
-            object_info = get_obj_pose(mesh, allow_nonflat=True)
-            if object_info is None:
-                continue
-            potype, pquat, ppos, pmesh = object_info
-
-            _, coli_sc = loader.recreate()
-            cmi, _ = trimesh.collision.scene_to_collision(coli_sc)
-
-            if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
-                #             print('SUCCESS!', tdis)
-                o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
-                level[1].append(o_id)
-    #         else:
-    #             print('FAILURE!', tdis)
+    #     # level 2
+    #     #     print('PLACING LEVEL 2')
+    #     for i, o_id1 in enumerate(level[1]):
+    #         for j, o_id2 in enumerate(level[1][i + 1:], start=i + 1):
+    #             # run placement algorithm
+    #             oim_map, _ = loader.recreate([o_id1, o_id2])
+    #             mo1, mo2 = list(oim_map.values())
+    #
+    #             object_info = get_obj_pose(mo1, mo2, allow_nonflat=True)
+    #             if object_info is None:
+    #                 continue
+    #
+    #             potype, pquat, ppos, pmesh = object_info
+    #
+    #             # check for collisions with current level and place if none
+    #             _, coli_sc = loader.recreate()
+    #             cmi, _ = trimesh.collision.scene_to_collision(coli_sc)
+    #
+    #             if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
+    #                 #                 print('SUCCESS!', tdis)
+    #                 o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
+    #                 level[2].append(o_id)
+    #                 level1_avail -= {o_id1, o_id2}
+    #     #             else:
+    #     #                 print('FAILURE!', tdis)
+    #
+    #     #     print('PLACING LEVEL 2 - AVAIL')
+    #     #     print(level1_avail)
+    #     for avail in level1_avail:
+    #         oim_map, _ = loader.recreate([avail])
+    #         mesh, = list(oim_map.values())
+    #
+    #         object_info = get_obj_pose(mesh, allow_nonflat=True)
+    #         if object_info is None:
+    #             continue
+    #         potype, pquat, ppos, pmesh = object_info
+    #
+    #         _, coli_sc = loader.recreate()
+    #         cmi, _ = trimesh.collision.scene_to_collision(coli_sc)
+    #
+    #         if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
+    #             #             print('SUCCESS!', tdis)
+    #             o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
+    #             level[2].append(o_id)
+    # #         else:
+    # #             print('FAILURE!', tdis)
+    #
+    #     level2_avail = set(level[2])
+    #
+    #
+    #     # level 2
+    #     #     print('PLACING LEVEL 3')
+    #     for i, o_id1 in enumerate(level[2]):
+    #         for j, o_id2 in enumerate(level[2][i + 1:], start=i + 1):
+    #             # run placement algorithm
+    #             oim_map, _ = loader.recreate([o_id1, o_id2])
+    #             mo1, mo2 = list(oim_map.values())
+    #
+    #             object_info = get_obj_pose(mo1, mo2, allow_nonflat=True)
+    #             if object_info is None:
+    #                 continue
+    #
+    #             potype, pquat, ppos, pmesh = object_info
+    #
+    #             # check for collisions with current level and place if none
+    #             _, coli_sc = loader.recreate()
+    #             cmi, _ = trimesh.collision.scene_to_collision(coli_sc)
+    #
+    #             if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
+    #                 #                 print('SUCCESS!', tdis)
+    #                 o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
+    #                 level[3].append(o_id)
+    #                 level2_avail -= {o_id1, o_id2}
+    #     #             else:
+    #     #                 print('FAILURE!', tdis)
+    #
+    #     #     print('PLACING LEVEL 3 - AVAIL')
+    #     #     print(level1_avail)
+    #     for avail in level2_avail:
+    #         oim_map, _ = loader.recreate([avail])
+    #         mesh, = list(oim_map.values())
+    #
+    #         object_info = get_obj_pose(mesh, allow_nonflat=True)
+    #         if object_info is None:
+    #             continue
+    #         potype, pquat, ppos, pmesh = object_info
+    #
+    #         _, coli_sc = loader.recreate()
+    #         cmi, _ = trimesh.collision.scene_to_collision(coli_sc)
+    #
+    #         if (tdis := cmi.min_distance_single(pmesh)) > COLL_DIST:
+    #             #             print('SUCCESS!', tdis)
+    #             o_id = loader.load_obj(potype, quat=pquat, pos=ppos, wait=wait, slow=slow)
+    #             level[3].append(o_id)
+    # #         else:
+    # #             print('FAILURE!', tdis)
 
     except Exception as e:
-        raise e
+        pass
+        # raise e
         # return None
 
     try:

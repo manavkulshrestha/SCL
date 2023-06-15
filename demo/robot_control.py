@@ -325,9 +325,8 @@ def move_obj_test(con, rec, suc, subset_idx, obj_x):
 
 
 def pawses(con, rec, obj_x):
-    obj_x = obj_x.reshape(4, 4, 6)
+    obj_x = obj_x.reshape(4, 2, 6)
     obj_x[:, :, 2] = np.max(obj_x[:, :, 2])
-    obj_x = obj_x.reshape(4, 4, 6)[:, :3]
 
     con.moveJ(home_q)
     for i, row in enumerate(obj_x):
@@ -338,6 +337,29 @@ def pawses(con, rec, obj_x):
             obj_x[i, j] = rec.getActualTCPPose()
             rmove_up(con, rec, meters=0.02, speed=VSLOW_SPEED)
             move_above(con, ox)
+
+    np.savez('obj_pos_8.npz', obj_x=obj_x)
+
+
+def get_layers2():
+    layer1 = np.array([12, 4, 11, 3])-1  # glcuboid, cylinder, gcuboid, cube
+    layer2 = np.array([6, 2, 9, 1])-1  # lrcuboid, cube, cylinder, ccuboid
+    layer3 = np.array([10, 8])-1  # blcuboid, cube
+    layer4 = np.array([7, 5])-1  # ccuboid, rlcuboid
+
+    layers = [layer1, layer2, layer3, layer4]
+    return layers
+
+
+def get_layers3():
+    layer1 = [5, 2, 4]  # gcuboid, bcuboid, ccuboid
+    layer2 = [7, 1]  # cube, cube
+    layer3 = [0]  # ccuboid
+    layer4 = [6]  # lgcuboid
+    layer5 = [3]  # rcuboid
+
+    layers = [layer1, layer2, layer3, layer4, layer5]
+    return layers
 
 
 def main():
@@ -350,21 +372,23 @@ def main():
     time.sleep(5)
     print('Executing')
 
-    obj_file = np.load('obj_pos_16.npz')
-    obj_x, obj_q = [obj_file[x] for x in ['obj_x', 'obj_q']]
+    obj_file = np.load('obj_pos_8.npz')
+    obj_x = obj_file['obj_x'][:, :2].reshape(-1, 6)
 
-    layers = get_layers()
+    layers = get_layers3()
 
     # con.moveJ(home_q)
+    # pawses(con, rec, obj_x)
+
     # order, tar_x = test1(con, rec, suc, obj_x, layers)
-    # np.savez(f'test12.npz', obj_x=obj_x, tar_x=tar_x)
+    # np.savez(f'test_demo3.npz', obj_x=obj_x, tar_x=tar_x)
 
-    # con.moveJ(home_q)
-    # t1_file = np.load('test1.npz')
-    # tar_x = t1_file['tar_x']
-    # test2(con, rec, suc, obj_x, tar_x, layers)
+    # con.moveJ(up_q)
 
-
+    con.moveJ(home_q)
+    t1_file = np.load('test_demo3.npz')
+    tar_x = t1_file['tar_x']
+    test2(con, rec, suc, obj_x, tar_x, layers)
 
 
 if __name__ == '__main__':

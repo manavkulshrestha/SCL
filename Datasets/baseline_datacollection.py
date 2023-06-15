@@ -139,7 +139,7 @@ def main():
     _, _, test_loader = get_scenesdataloader(feat_net)
     print('done loading')
 
-    cur_seg = (20, 25)
+    cur_seg = (0, 10)
     data_counts = {cur_seg: 0}
     max_examples = 99999
 
@@ -156,9 +156,6 @@ def main():
         if data_counts[cur_seg] >= max_examples:
             print(f'[{i}] skipping because already have {data_counts[cur_seg]} >= {max_examples} samples')
             continue
-        # if i != 9237:
-        #     continue
-
         curr_state = setup_env(data.oid_tid[0][0], data.node_ids[0],
                                data.g_poss[0], data.g_orns[0], headless=True)
         plan = planning(data.adj_mat[0])
@@ -177,6 +174,11 @@ def main():
             'goal_x': data.x,
             'init_x': curr_x,
             'plan': plan,
+            'oid_tid': data.oid_tid[0][0],
+            'node_ids': data.node_ids[0],
+            'adj_mat': data.adj_mat[0],
+            'g_poss': data.g_poss[0],
+            'g_orns': data.g_orns[0]
         }
 
         base_data.append(this_scene_data)

@@ -26,9 +26,9 @@ ASSET_ROOT = 'robot/assets/'
 
 
 class UR5:
-    def __init__(self, base_pos, move_timestep=0):
+    def __init__(self, base_pos, orn=(0, 0, 0), move_timestep=0):
         pth = os.path.join(ASSET_ROOT, UR5_URDF_PATH)
-        self.id = p.loadURDF(pth, base_pos)
+        self.id = p.loadURDF(pth, base_pos, p.getQuaternionFromEuler(orn))
 
         ddict = {'fixed': [], 'rigid': [], 'deformable': []}
         self.ee_id = 10
@@ -146,7 +146,7 @@ class UR5:
         return p.getLinkState(self.id, self.ee_id)[4:6]
 
 
-def setup(pos=[-0.5, 0, 0]):
+def setup(pos=(-0.5, 0, 0)):
     ur5 = UR5(pos)
 
     for _ in range(100):

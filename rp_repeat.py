@@ -1,3 +1,5 @@
+import pickle
+
 import pybullet as p
 import pybullet_data
 
@@ -14,7 +16,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 from Datasets.dutility import PDPATH, DDPATH, get_depdataloaders
-from Generation.gen_lib import simulate_scene_pc, Camera, PBObjectLoader
+from Generation.gen_lib2 import simulate_scene_pc, Camera, PBObjectLoader
 from nn.Network import ObjectNet, DNet
 from nn.PositionalEncoder import PositionalEncoding
 from robot.robot import UR5
@@ -26,7 +28,7 @@ from utility import load_model, all_edges, name_tid, tid_name, map_dict, draw_sp
 debug = False
 
 
-def setup_basic(headless=False):
+def setup_basic(headless=True):
     """ sets up the camera, adds gravity, and adds the plane """
     physics_client = p.connect(p.DIRECT if headless else p.GUI)
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
@@ -51,12 +53,6 @@ def setup_field(loader_target, slow=False):
 
     num_objs = len(loader_target.obj_poses)
 
-    # hard_code = np.array([2, 1, 9, 15, 18,
-    #              11, 16, 10, 14, 7,
-    #              17, 12, 19, 13, 5,
-    #              6, 4, 3, 8])
-    # hard_code = np.arange(19)+1
-
     idx = 0
     for xpos in np.linspace(*x_range, 5):
         for ypos in np.linspace(*y_range, 5):
@@ -64,7 +60,6 @@ def setup_field(loader_target, slow=False):
                 break
 
             oid = loader_target.obj_ids[idx]
-            # oid = hard_code[idx]
             typ = loader_target.oid_typ_map[oid]
             pos, orn = loader_target.obj_poses[oid]
 
@@ -202,80 +197,11 @@ def get_suc_point(pcds, oids, oid, epsilon=0.00001):
     return uppermost_pts.mean(axis=0)
 
 
-def pick_place(obj_idx, l_num, layer, curr_state, goal_state):
-    # movj_idx = np.where([sidx == obj_idx])[1][0]
-    c_oid = curr_state.obj_ids[obj_idx]
-    g_oid = goal_state.obj_ids[obj_idx]
-
-    if c_oid == 1:
-        # robot.move_timestep = 1/60
-        print(1)
-
-    # in real, position obtained from point-cloud and orientation from TEASER++
-    c_pos_cen, c_orn = p.getBasePositionAndOrientation(c_oid)
-    g_pos_cen, g_orn = get_target_pose(goal_state, g_oid)
-    c_pos = np.array(c_pos_cen)  # get_suc_point(c_pcds, c_oids, c_oid)
-    g_pos_cen = np.array(g_pos_cen)
-
-    # obtain goal orientation
-    g_orn_to = p.getDifferenceQuaternion(c_orn, g_orn)  # in real, done with TEASER++
-
-    # move above cur position, move to curr, pick, move above curr
-    robot.move_ee_above(c_pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.2))
-    robot.move_ee_above(c_pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.05))
-    c_pos_from, _ = robot.move_ee_down(c_pos, orn=(0, 0, 0, 1))
-    robot.suction(True)
-    robot.move_ee_above(c_pos, orn=(0, 0, 0, 1))
-
-    # obtain goal pose
-    succ_offt = np.subtract(c_pos_from, c_pos_cen)
-    g_orn_mat = R.from_quat(g_orn_to).as_matrix()
-    rotated_succ_offt = g_orn_mat @ succ_offt
-    g_pos_to = g_pos_cen + rotated_succ_offt
-
-    # move above goal position, move to goal, drop, move above goal
-    robot.move_ee_above(g_pos_to, orn=g_orn_to)
-    robot.move_ee(g_pos_to + [0, 0, 0.002], orn=g_orn_to)
-
-    for _ in range(100):  # block has inertia from the robot moving
-        p.stepSimulation()
-        if debug:
-            time.sleep(robot.move_timestep)
-
-    robot.suction(False)
-
-    # p.changeDynamics(c_oid, -1, mass=0.1)
-    for _ in range(500):
-        p.stepSimulation()
-        if debug:
-            time.sleep(robot.move_timestep)
-
-    robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
-    lf_num = min(2, l_num)
-    p.changeDynamics(c_oid, -1, mass=[0.5, 0.02, 0.01][lf_num])
-    # p.resetBasePositionAndOrientation(c_oid, g_pos_cen, g_orn)  # TODO for testing, remove later
-
-def rearrange(robot, topo_layers, curr_state, goal_state):
-    for l_num, layer in enumerate(topo_layers):
-        for obj_idx in layer:
-            pick_place(obj_idx, l_num, layer)
+def sim_offset_adjustment(o_id, g_pos, g_orn):
+    p.resetBasePositionAndOrientation(o_id, g_pos, g_orn)
 
 
-
-def main():
-    # seed = 1369 or np.random.randint(0, 10000)
-    # seed = 500 or np.random.randint(0, 10000)
-    # seed = 9457 or np.random.randint(0, 10000)
-    # seed = 8634 or np.random.randint(0, 10000) # maybe
-    # seed = 3097 or np.random.randint(0, 10000)
-    # seed = 4276 or np.random.randint(0, 10000)
-    # seed = 8174 or np.random.randint(0, 10000)
-    # seed = 4978 or np.random.randint(0, 10000) # pred error, but recovers
-
-    # seed = 1900
-
-    seed = 4641 or np.random.randint(0, 10000)
-    # seed = 1900
+def main(seed, num_levels):
     print(f'SEED: {seed}')
     np.random.seed(seed)
 
@@ -292,9 +218,8 @@ def main():
     cams = [Camera(pos) for pos in [[0.15, 0.15, .2], [0.15, -0.15, .2], [0, 0, .3]]]
 
     # set up the target scene
-    goal_state, pcds, oids = simulate_scene_pc(cams, slow=False, wait=100)
-    # goal_state, pcds, oids = simulate_scene_pc(cams, slow=False, wait=100, num_levels=5, level_bounds=5*[5])
-    #
+    goal_state, pcds, oids = simulate_scene_pc(cams, slow=False, wait=100, num_levels=num_levels)
+
     # infer scene structure
     node_graph = initial_graph(pcds, oids, feat_model=feat_net)
     start = time.time()
@@ -322,9 +247,7 @@ def main():
     cam4_pos = [-0.25, 0, 0.5]
     # cam4 = Camera(cam4_pos, target=[*cam4_pos[:2], 0])
     # c_pcds, c_oids = cam4.get_point_cloud()
-    robot = UR5([-0.5, 0, 0], orn=(0, 0, 0))
-    # robot2 = UR5([0.5, 0, 0], orn=(0, 0, np.pi))
-    # robot = UR5([0.5, 0, 0])
+    robot = UR5([-0.5, 0, 0])
     for _ in range(100):
         p.stepSimulation()
 
@@ -338,21 +261,64 @@ def main():
     #     p.stepSimulation()
     #     time.sleep(1/240)
 
-
-
     # rearrangement
+    moved_idx = []
+    for l_num, layer in enumerate(topo_layers):
+        for obj_idx in layer:
+            moved_idx.append(obj_idx)
+            c_oid = curr_state.obj_ids[obj_idx]
+            g_oid = goal_state.obj_ids[obj_idx]
 
-    # hard_code = np.array([2, 1, 9, 15, 18,
-    #                       11, 16, 10, 14, 7,
-    #                       17, 12, 19, 13, 5,
-    #                       6, 4, 3, 8])
-    # # hard_code = np.arange(19)+1
-    # sidx = hard_code.argsort()
-    # sidx2 = sidx.argsort()
-    #
-    # curr_state.obj_ids = np.array(curr_state.obj_ids)[sidx2][::-1]
+            if c_oid == 1:
+                # robot.move_timestep = 1/60
+                print(1)
 
-    rearrange()
+            # in real, position obtained from point-cloud and orientation from TEASER++
+            c_pos_cen, c_orn = p.getBasePositionAndOrientation(c_oid)
+            g_pos_cen, g_orn = get_target_pose(goal_state, g_oid)
+            c_pos = np.array(c_pos_cen)  # get_suc_point(c_pcds, c_oids, c_oid)
+            g_pos_cen = np.array(g_pos_cen)
+
+            # obtain goal orientation
+            g_orn_to = p.getDifferenceQuaternion(c_orn, g_orn)  # in real, done with TEASER++
+
+            # move above cur position, move to curr, pick, move above curr
+            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.2))
+            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1), above_offt=(0, 0, 0.05))
+            c_pos_from, _ = robot.move_ee_down(c_pos, orn=(0, 0, 0, 1))
+            robot.suction(True)
+            robot.move_ee_above(c_pos, orn=(0, 0, 0, 1))
+
+            # obtain goal pose
+            succ_offt = np.subtract(c_pos_from, c_pos_cen)
+            g_orn_mat = R.from_quat(g_orn_to).as_matrix()
+            rotated_succ_offt = g_orn_mat@succ_offt
+            g_pos_to = g_pos_cen+rotated_succ_offt
+
+            # move above goal position, move to goal, drop, move above goal
+            robot.move_ee_above(g_pos_to, orn=g_orn_to)
+            robot.move_ee(g_pos_to+[0, 0, 0.002], orn=g_orn_to)
+
+            for _ in range(100): # block has inertia from the robot moving
+                p.stepSimulation()
+                if debug:
+                    time.sleep(robot.move_timestep)
+
+            robot.suction(False)
+
+            # if True:  # and close(*p.getBasePositionAndOrientation(c_oid), g_pos_cen, g_orn):
+            #     sim_offset_adjustment(c_oid, g_pos_cen, g_orn)
+
+            # p.changeDynamics(c_oid, -1, mass=0.1)
+            for _ in range(500):
+                p.stepSimulation()
+                if debug:
+                    time.sleep(robot.move_timestep)
+
+            robot.move_ee_above(g_pos_cen, orn=(0, 0, 0, 1))
+            lf_num = min(2, l_num)
+            p.changeDynamics(c_oid, -1, mass=[0.5, 0.02, 0.01][lf_num])
+            # p.resetBasePositionAndOrientation(c_oid, g_pos_cen, g_orn)  # TODO for testing, remove later
 
 
     # metric collection
@@ -382,10 +348,74 @@ def main():
     print(f'planning time: {planning_time:.6f} (dependence graph) and {withsorting_time:.6f} (with sorting)')
     print(f'number of objects: {len(moved_idx)}')
 
-    time.sleep(100000)
 
     # logging in file, analysis/readout script
 
+    p_s = pos_err < 0.01
+    o_s = orn_err < 0.03
+    completion = p_s & o_s
+
+    com, suc = completion.mean(), completion.all()
+    p.disconnect()
+
+    return {
+        'pos_err': pos_err, 'orn_err': ora_err, 'ora_err': ora_err,
+        'pos_mean': np.mean(pos_err), 'pos_std': np.std(pos_err),
+        'orn_mean': np.mean(orn_err), 'orn_std': np.std(orn_err),
+        'ora_mean': np.mean(ora_err), 'ora_std': np.std(ora_err),
+        'obj_num': len(moved_idx),
+        'success': suc,
+        'completion': com
+    }
+
+
+def print_store_data(res, num_levels, seeds):
+    successes = np.array([r['success'] for r in res])
+
+    pos_m = np.array([r['pos_mean'] for r in res])[successes].mean()
+    pos_s = np.array([r['pos_std'] for r in res])[successes].mean()
+
+    orn_m = np.array([r['orn_mean'] for r in res])[successes].mean()
+    orn_s = np.array([r['orn_std'] for r in res])[successes].mean()
+
+    ora_m = np.array([r['ora_mean'] for r in res])[successes].mean()
+    ora_s = np.array([r['ora_std'] for r in res])[successes].mean()
+
+    success = successes.mean()
+    completion = np.array([r['completion'] for r in res]).mean()
+
+    obj_nums = np.array([r['obj_num'] for r in res])
+    obj_m, obj_s = obj_nums.mean(), np.std(obj_nums)
+
+    print('FINAL METRICS')
+    print(f'success rate: {success}, completion rate: {completion}\n')
+    print(f'mean position error:\t\t{pos_m}+/-{pos_s} (m)')
+    print(f'mean orientation error:\t\t{orn_m}+/-{orn_s} (0-1)')
+    print(f'mean orientation angle error:\t\t{ora_m}+/-{ora_s} (0-1)')
+    print(f'mean obj num:\t\t{obj_m}+/-{obj_s}')
+    print('seeds:', seeds)
+
+    tt = int(time.time())
+    with open(f'results/level/results_{num_levels}_{tt}', 'wb') as f:
+        pickle.dump({'results': res, 'seeds': seeds}, f)
+
+    with open(f'results/level/summary_{num_levels}_{tt}', 'w') as f:
+        print('FINAL METRICS', file=f)
+        print(f'success rate: {success}, completion rate: {completion}\n', file=f)
+        print(f'mean position error:\t\t{pos_m}+/-{pos_s} (m)', file=f)
+        print(f'mean orientation error:\t\t{orn_m}+/-{orn_s} (0-1)', file=f)
+        print(f'mean orientation angle error:\t\t{ora_m}+/-{ora_s} (0-1)', file=f)
+        print(f'mean obj num:\t\t{obj_m}+/-{obj_s} (0-1)', file=f)
+        print('seeds:', seeds, file=f)
+
 
 if __name__ == '__main__':
-    main()
+    for num_levels in [3, 4, 5]:
+        res = []
+        seeds = np.random.randint(0, 10000, (300,))
+        for seed in seeds:
+            try:
+                res.append(main(seed, num_levels))
+            except:
+                p.disconnect()
+        print_store_data(res, num_levels, seeds)

@@ -43,7 +43,7 @@ def train_epoch(model, epoch, loader, optimizer, progress=False):
         # target_e_idx = torch.cat([gt_e_idx, n_e_idx], dim=1)
         # target_e_y = torch.cat([torch.ones(gt_e_idx.size(1)), torch.zeros(n_e_idx.size(1))]).cuda()
 
-        out = model(batch.x, target_e_idx)
+        out = model(batch.x, target_e_idx, edge_type=torch.zeros_like(target_e_y))
 
         # get loss and update model
         loss = loss_fn(out, target_e_y)
@@ -73,7 +73,7 @@ def test_epoch(model, epoch, loader, thresh=0.5, progress=False):
         if epoch % 100 and epoch > 0:
             print('', end='')
 
-        out = model(batch.x, all_e_idx)
+        out = model(batch.x, all_e_idx, edge_type=torch.zeros_like(all_e_y))
         outs = out.sigmoid()
         pred = (outs > threshold).float()
 

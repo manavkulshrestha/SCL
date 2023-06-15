@@ -1,6 +1,7 @@
 import torch
 from torch.nn import BatchNorm2d, LeakyReLU, Dropout, BatchNorm1d
-from torch_geometric.nn import GCNConv, PointNetConv, global_max_pool, MLP, radius, fps, GATv2Conv, GraphSAGE
+from torch_geometric.nn import GCNConv, PointNetConv, global_max_pool, MLP, radius, fps, GATv2Conv, GraphSAGE, \
+    SignedGCN, SAGEConv, RGCNConv
 from torch_geometric.nn.dense.linear import Linear
 from torch import nn
 from utility import sliding, sample_exact, normalize, device
@@ -184,14 +185,16 @@ class DNet(torch.nn.Module):
 class GNEncoder(torch.nn.Module):
     def __init__(self, in_c, h_c, out_c):
         super().__init__()
-        self.layer1 = GraphSAGE(in_c, h_c, 1)
-        self.layer2 = GraphSAGE(h_c, out_c, 1)
+        self.layer1 = GCNConv(in_c, h_c)
+        self.layer2 = GCNConv(h_c, out_c)
+        # self.layer1 = SAGEConv(in_c, h_c)
+        # self.layer2 = SAGEConv(h_c, out_c)
         # self.layer3 = GCNConv(h_c, h_c)
         # self.layer4 = GCNConv(h_c, h_c)
         # self.layer5 = GraphSAGE(h_c, out_c, 1)
         self.activation = LeakyReLU()
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index, edge_type=None):
         x = self.layer1(x, edge_index)
         x = self.activation(x)
         x = self.layer2(x, edge_index)
@@ -230,14 +233,14 @@ class GNDecoder(torch.nn.Module):
 
 
 class GNet(torch.nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels, **kwargs):
+    def __init__(self, in_channels, hidden_channels, out_channels):
         super().__init__()
-        self.encoder = GNEncoder(in_channels, hidden_channels, out_channels, **kwargs)
-        self.decoder = GNDecoder(out_channels, **kwargs)
+        self.encoder = GNEncoder(in_channels, hidden_channels, out_channels)
+        self.decoder = GNDecoder(out_channels)
         self.loss = torch.nn.BCEWithLogitsLoss()
 
-    def forward(self, x, edge_index):
-        z = self.encoder(x, edge_index)
+    def forward(self, x, edge_index, edge_type=None):
+        z = self.encoder(x, edge_index, edge_type=edge_type)
         out = self.decoder(z, edge_index)
 
         return out
