@@ -1,6 +1,6 @@
 # SCL: Structural Concept Learning for Multi-Level Rearrangement Planning
 
-A partial and unmaintained code release for [https://arxiv.org/abs/2309.02547](SCL). Can be cited as
+A partial and unmaintained code release for [SCL](https://arxiv.org/abs/2309.02547). Can be cited as
 
 ```
 @inproceedings{kulshrestha2023structural,
